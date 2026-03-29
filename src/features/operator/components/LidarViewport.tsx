@@ -1,17 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { DETECTION_COLORS } from '../../../domain/constants'
-import type { InterestArea, TrackedObject } from '../../../domain/types'
+import { DETECTION_COLORS, STREAM_ORDER } from '../../../domain/constants'
+import type { InterestArea, StreamId, TrackedObject } from '../../../domain/types'
 import { formatElapsed } from '../../../lib/time'
+import vehicleImg from '../../../assets/vehicle-top.png'
 
 interface LidarViewportProps {
   tracks: TrackedObject[]
   focusedTrackId?: string
   now: number
   streamLabel: string
+  activeStreamId: StreamId
   colorScale: 'yellow-red' | 'black-white'
   zones: InterestArea[]
   streamAvailable: boolean
   onFocusResolved: (trackId: string) => void
+  onSwitchStream: (streamId: StreamId) => void
 }
 
 interface CameraState {
@@ -27,10 +30,12 @@ export function LidarViewport({
   focusedTrackId,
   now,
   streamLabel,
+  activeStreamId,
   colorScale,
   zones,
   streamAvailable,
   onFocusResolved,
+  onSwitchStream,
 }: LidarViewportProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const [camera, setCamera] = useState<CameraState>({
@@ -48,6 +53,11 @@ export function LidarViewport({
   })
 
   const cloudPoints = useMemo(() => buildCloudPoints(tracks), [tracks])
+
+  const activeIndex = STREAM_ORDER.indexOf(activeStreamId)
+  const leftStream = STREAM_ORDER[(activeIndex + 3) % 4]
+  const rightStream = STREAM_ORDER[(activeIndex + 1) % 4]
+  const backStream = STREAM_ORDER[(activeIndex + 2) % 4]
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -154,35 +164,113 @@ export function LidarViewport({
           setCamera((prev) => ({ ...prev, zoom: clamp(prev.zoom + delta, 2.2, 10) }))
         }}
       />
-      <div className="viewport-overlay">
-        <div className="overlay-line">{`Open stream - ${streamLabel}`}</div>
-        <div className="overlay-line">
-          Drag = orbit, <span className="kbd">Shift</span> + drag = pan, wheel = zoom
-        </div>
+
+      {/* Stream label overlay */}
+      <div className="viewport-stream-label">
+        Open stream - {streamLabel.toLowerCase()}
       </div>
-      <div className="toolbar" style={{ position: 'absolute', left: 12, right: 12, bottom: 12 }}>
-        <div className="toolbar-group">
-          <button className="small-btn" type="button" onClick={() => applyPreset('top')}>
-            Top view
-          </button>
-          <button className="small-btn" type="button" onClick={() => applyPreset('side')}>
-            Side view
-          </button>
-          <button className="small-btn" type="button" onClick={() => applyPreset('reset')}>
-            Reset camera
-          </button>
+
+      {/* Compass + vehicle + directional nav overlay */}
+      <div className="viewport-nav-overlay">
+        <div className="nav-compass">
+          {/* N indicator */}
+          <div className="compass-north">N</div>
+
+          {/* SVG compass rings + crosshairs + detection wedge */}
+          <svg viewBox="0 0 300 320" width="300" height="320" className="compass-svg">
+            {/* Outer ring */}
+            <circle cx="150" cy="170" r="130" fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="1" />
+            {/* Inner ring */}
+            <circle cx="150" cy="170" r="88" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="0.5" />
+
+            {/* Crosshair lines */}
+            <line x1="150" y1="40" x2="150" y2="170" stroke="rgba(255,255,255,0.12)" strokeWidth="0.5" />
+            <line x1="150" y1="170" x2="150" y2="300" stroke="rgba(255,255,255,0.12)" strokeWidth="0.5" />
+            <line x1="20" y1="170" x2="150" y2="170" stroke="rgba(255,255,255,0.12)" strokeWidth="0.5" />
+            <line x1="150" y1="170" x2="280" y2="170" stroke="rgba(255,255,255,0.12)" strokeWidth="0.5" />
+
+            {/* Small tick marks at compass ring edge */}
+            <line x1="150" y1="40" x2="150" y2="32" stroke="rgba(255,255,255,0.3)" strokeWidth="1" />
+            <line x1="280" y1="170" x2="288" y2="170" stroke="rgba(255,255,255,0.2)" strokeWidth="0.7" />
+            <line x1="150" y1="300" x2="150" y2="308" stroke="rgba(255,255,255,0.2)" strokeWidth="0.7" />
+            <line x1="20" y1="170" x2="12" y2="170" stroke="rgba(255,255,255,0.2)" strokeWidth="0.7" />
+
+            {/* Red detection wedge - rotated per active stream */}
+            <g transform={`rotate(${VIEWPORT_WEDGE_ROTATION[activeStreamId]} 150 170)`}>
+              <path
+                d="M150 170 L120 50 A80 80 0 0 1 180 50 Z"
+                fill="rgba(200, 20, 20, 0.75)"
+              />
+            </g>
+          </svg>
+
+          {/* Vehicle image on top of compass */}
+          <img
+            className="compass-vehicle"
+            src={vehicleImg}
+            alt=""
+            draggable={false}
+          />
         </div>
+
+        <button
+          className="nav-goto nav-goto-left"
+          type="button"
+          onClick={() => onSwitchStream(leftStream)}
+        >
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M19 12H5M12 19l-7-7 7-7" />
+          </svg>
+          <span>Go to</span>
+        </button>
+
+        <button
+          className="nav-goto nav-goto-right"
+          type="button"
+          onClick={() => onSwitchStream(rightStream)}
+        >
+          <span>Go to</span>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M5 12h14M12 5l7 7-7 7" />
+          </svg>
+        </button>
+
+        <button
+          className="nav-goto nav-goto-down"
+          type="button"
+          onClick={() => onSwitchStream(backStream)}
+        >
+          <span>Go to</span>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M12 5v14M5 12l7 7 7-7" />
+          </svg>
+        </button>
       </div>
+
+      {/* Camera preset controls (subtle, bottom-left) */}
+      <div className="viewport-presets">
+        <button className="preset-btn" type="button" onClick={() => applyPreset('top')}>Top</button>
+        <button className="preset-btn" type="button" onClick={() => applyPreset('side')}>Side</button>
+        <button className="preset-btn" type="button" onClick={() => applyPreset('reset')}>Reset</button>
+      </div>
+
       {!streamAvailable && (
         <div className="offline-banner">
           <div className="offline-inner">
             <strong>Stream unavailable</strong>
-            <div className="muted">Choose another LiDAR stream from the toolbar or alerts panel.</div>
+            <div className="muted">Choose another LiDAR stream from the sidebar or navigation buttons.</div>
           </div>
         </div>
       )}
     </div>
   )
+}
+
+const VIEWPORT_WEDGE_ROTATION: Record<StreamId, number> = {
+  front: -20,
+  right: 70,
+  back: 160,
+  left: 250,
 }
 
 interface CloudPoint {
@@ -261,7 +349,7 @@ function drawScene(
   context.fillRect(0, 0, width, height)
 
   const centerX = width / 2 + camera.panX
-  const centerY = height * 0.55 + camera.panY
+  const centerY = height * 0.45 + camera.panY
 
   drawRadiusRings(context, centerX, centerY)
   drawZones(context, centerX, centerY, zones)
@@ -294,7 +382,7 @@ function drawScene(
     context.fillStyle = '#ffffff'
     context.font = focused ? '12px "Helvetica Neue", sans-serif' : '11px "Helvetica Neue", sans-serif'
     context.fillText(
-      `${formatElapsed(track.firstDetectedAt, now)} | Az ${track.distance.azimuthDeg.toFixed(0)} deg`,
+      `${formatElapsed(track.firstDetectedAt, now)} | Az ${track.distance.azimuthDeg.toFixed(0)}\u00B0`,
       x + 9,
       y - 8,
     )
@@ -306,8 +394,8 @@ function drawRadiusRings(context: CanvasRenderingContext2D, centerX: number, cen
   for (const ring of rings) {
     context.beginPath()
     context.arc(centerX, centerY, ring, 0, Math.PI * 2)
-    context.strokeStyle = 'rgba(255,255,255,0.2)'
-    context.lineWidth = 1
+    context.strokeStyle = 'rgba(255,255,255,0.12)'
+    context.lineWidth = 0.5
     context.stroke()
   }
 }

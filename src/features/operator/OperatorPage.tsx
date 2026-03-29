@@ -36,9 +36,10 @@ export function OperatorPage() {
   }))
   const [preferences, setPreferences] = useState(() => readPreferences())
   const [zones, setZones] = useState<InterestArea[]>(() => readZones())
-  const [dismissedAlertIds, setDismissedAlertIds] = useState<string[]>([])
+  const [dismissedStreams, setDismissedStreams] = useState<StreamId[]>([])
   const [workflowState, setWorkflowState] = useState<WorkflowState>(createWorkflowState())
   const [alerts, setAlerts] = useState<AlertEvent[]>([])
+  const [sidebarOpen, setSidebarOpen] = useState(true)
   const [statusMessage, setStatusMessage] = useState<string>('')
   const normalizerStateRef = useRef(createNormalizerState())
   const queueRef = useRef<AlertEvent[]>([])
@@ -102,14 +103,10 @@ export function OperatorPage() {
   )
 
   const visibleAlerts = useMemo(() => {
-    const filtered = alerts.filter((alert) => !dismissedAlertIds.includes(alert.alertId))
-    if (preferences.sortMode === 'time') {
-      return [...filtered].sort((a, b) => b.detectedAt - a.detectedAt)
-    }
-    return filtered
-  }, [alerts, dismissedAlertIds, preferences.sortMode])
+    return alerts.filter((alert) => !dismissedStreams.includes(alert.streamId))
+  }, [alerts, dismissedStreams])
 
-  const selectStream = (streamId: StreamId) => {
+  const switchStream = (streamId: StreamId) => {
     const target = snapshot.streams.find((stream) => stream.id === streamId)
     if (!target?.available) {
       setStatusMessage(`Cannot open ${STREAM_LABELS[streamId]}: stream unavailable`)
@@ -120,31 +117,36 @@ export function OperatorPage() {
     setWorkflowState((prev) => advanceWorkflow(prev, { type: 'CLEAR_FOCUS' }))
   }
 
-  const onAlertClick = (alert: AlertEvent) => {
-    const targetStream = snapshot.streams.find((stream) => stream.id === alert.streamId)
+  const onGoToStream = (streamId: StreamId) => {
+    const targetStream = snapshot.streams.find((stream) => stream.id === streamId)
     if (!targetStream?.available) {
-      setStatusMessage(`Cannot open ${STREAM_LABELS[alert.streamId]}: stream unavailable`)
+      setStatusMessage(`Cannot open ${STREAM_LABELS[streamId]}: stream unavailable`)
       return
     }
     setStatusMessage('')
     let nextToken = 0
     setWorkflowState((prev) => {
+      const streamAlerts = alerts.filter((a) => a.streamId === streamId)
+      const target = streamAlerts[0]
+      if (!target) {
+        return advanceWorkflow(prev, { type: 'CLEAR_FOCUS' })
+      }
       const next = advanceWorkflow(prev, {
         type: 'SELECT_ALERT',
-        alertId: alert.alertId,
-        trackId: alert.trackId,
-        streamId: alert.streamId,
+        alertId: target.alertId,
+        trackId: target.trackId,
+        streamId: target.streamId,
       })
       nextToken = next.token
       return next
     })
-    setPreferences((prev) => ({ ...prev, selectedStreamId: alert.streamId }))
+    setPreferences((prev) => ({ ...prev, selectedStreamId: streamId }))
     window.setTimeout(() => {
       setWorkflowState((prev) =>
         advanceWorkflow(prev, {
           type: 'STREAM_SWITCHED',
           token: nextToken,
-          streamId: alert.streamId,
+          streamId,
         }),
       )
     }, 120)
@@ -153,67 +155,30 @@ export function OperatorPage() {
   const activeTracks = snapshot.tracksByStream[preferences.selectedStreamId]
 
   return (
-    <div className="operator-layout">
-      <AlertsSidebar
-        alerts={visibleAlerts}
-        now={snapshot.now}
-        sortMode={preferences.sortMode}
-        onSortModeChange={(sortMode) => setPreferences((prev) => ({ ...prev, sortMode }))}
-        onAlertClick={onAlertClick}
-        onDismiss={(alertId) =>
-          setDismissedAlertIds((current) => (current.includes(alertId) ? current : [alertId, ...current]))
-        }
-        showVelocity={preferences.showVelocity}
-        onToggleVelocity={() =>
-          setPreferences((prev) => ({ ...prev, showVelocity: !prev.showVelocity }))
-        }
-        soundEnabled={preferences.soundEnabled}
-        onToggleSound={() =>
-          setPreferences((prev) => ({ ...prev, soundEnabled: !prev.soundEnabled }))
-        }
-      />
+    <div className="operator-layout" data-sidebar={sidebarOpen}>
+      {sidebarOpen && (
+        <AlertsSidebar
+          alerts={visibleAlerts}
+          now={snapshot.now}
+          activeStreamId={preferences.selectedStreamId}
+          onGoToStream={onGoToStream}
+          onDismissStream={(streamId) =>
+            setDismissedStreams((prev) => (prev.includes(streamId) ? prev : [...prev, streamId]))
+          }
+          onClose={() => setSidebarOpen(false)}
+        />
+      )}
       <main className="operator-main">
-        <div className="toolbar">
-          <div className="toolbar-group">
-            <div className="stream-tabs">
-              {snapshot.streams.map((stream) => (
-                <button
-                  className="stream-tab"
-                  data-active={preferences.selectedStreamId === stream.id}
-                  data-offline={!stream.available}
-                  key={stream.id}
-                  type="button"
-                  onClick={() => selectStream(stream.id)}
-                >
-                  {stream.label}
-                </button>
-              ))}
-            </div>
-            <span className="muted">Single active stream + cross-stream alerts</span>
-          </div>
-          <div className="toolbar-group">
-            <button
-              className="small-btn"
-              type="button"
-              onClick={() =>
-                setPreferences((prev) => ({
-                  ...prev,
-                  colorScale:
-                    prev.colorScale === 'yellow-red' ? 'black-white' : 'yellow-red',
-                }))
-              }
-            >
-              Color scale: {preferences.colorScale}
-            </button>
-            {statusMessage && <span className="muted">{statusMessage}</span>}
-          </div>
-        </div>
+        {statusMessage && (
+          <div className="status-toast">{statusMessage}</div>
+        )}
 
         <LidarViewport
           tracks={activeTracks}
           focusedTrackId={workflowState.focusTrackId}
           now={snapshot.now}
           streamLabel={activeStream?.label ?? 'Unknown'}
+          activeStreamId={preferences.selectedStreamId}
           colorScale={preferences.colorScale}
           zones={zones}
           streamAvailable={activeStream?.available ?? false}
@@ -226,6 +191,7 @@ export function OperatorPage() {
               }),
             )
           }}
+          onSwitchStream={switchStream}
         />
       </main>
     </div>
@@ -249,4 +215,3 @@ function playAlertTone(priority: AlertEvent['priority']) {
     // Ignore if browser audio context is unavailable.
   }
 }
-
