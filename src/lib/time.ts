@@ -17,13 +17,3 @@ export function formatClock(epochMs: number): string {
   const d = new Date(epochMs)
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 }
-
-export function formatDateTime(epochMs: number): string {
-  const d = new Date(epochMs)
-  const hh = String(d.getHours()).padStart(2, '0')
-  const mm = String(d.getMinutes()).padStart(2, '0')
-  const dd = String(d.getDate()).padStart(2, '0')
-  const mo = String(d.getMonth() + 1).padStart(2, '0')
-  const yyyy = d.getFullYear()
-  return `${hh}:${mm} ${dd}/${mo}/${yyyy}`
-}
