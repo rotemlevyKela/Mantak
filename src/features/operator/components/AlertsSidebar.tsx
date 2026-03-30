@@ -1,7 +1,8 @@
 import { useMemo } from 'react'
 import { STREAM_LABELS, STREAM_ORDER } from '../../../domain/constants'
 import type { AlertEvent, StreamId } from '../../../domain/types'
-import { formatClock } from '../../../lib/time'
+import { formatDateTime } from '../../../lib/time'
+import lidarSensorImg from '../../../assets/lidar-sensor.png'
 
 interface AlertsSidebarProps {
   alerts: AlertEvent[]
@@ -17,6 +18,7 @@ interface StreamSummary {
   detectionCount: number
   latestTimestamp: number
   maxPriority: 'critical' | 'high' | 'medium' | 'low'
+  objectBreakdown: { man: number; drone: number; vehicle: number }
 }
 
 const PRIORITY_LABEL: Record<string, string> = {
@@ -45,6 +47,10 @@ export function AlertsSidebar({
           : priorities.includes('medium')
             ? 'medium'
             : 'low'
+      const objectBreakdown = { man: 0, drone: 0, vehicle: 0 }
+      for (const a of streamAlerts) {
+        if (a.objectType in objectBreakdown) objectBreakdown[a.objectType]++
+      }
       return {
         streamId,
         detectionCount: streamAlerts.length,
@@ -53,6 +59,7 @@ export function AlertsSidebar({
             ? Math.max(...streamAlerts.map((a) => a.detectedAt))
             : now,
         maxPriority,
+        objectBreakdown,
       }
     })
     return summaries.filter((s) => s.detectionCount > 0)
@@ -107,21 +114,42 @@ export function AlertsSidebar({
                 </div>
 
                 <div className="c2-card-row-meta">
-                  <span className="c2-card-meta">Areas of detection:</span>
+                  <span className="c2-card-meta">Detections:</span>
                   <span className="c2-count" data-priority={summary.maxPriority}>
                     {summary.detectionCount}
                   </span>
                 </div>
 
+                <div className="c2-card-breakdown">
+                  {summary.objectBreakdown.man > 0 && (
+                    <span className="c2-obj-badge">
+                      <PersonIcon />
+                      {summary.objectBreakdown.man}
+                    </span>
+                  )}
+                  {summary.objectBreakdown.vehicle > 0 && (
+                    <span className="c2-obj-badge">
+                      <VehicleIcon />
+                      {summary.objectBreakdown.vehicle}
+                    </span>
+                  )}
+                  {summary.objectBreakdown.drone > 0 && (
+                    <span className="c2-obj-badge">
+                      <DroneIcon />
+                      {summary.objectBreakdown.drone}
+                    </span>
+                  )}
+                </div>
+
                 <div className="c2-card-row-meta">
                   <span className="c2-card-timestamp">
-                    {formatClock(summary.latestTimestamp)}
+                    {formatDateTime(summary.latestTimestamp)}
                   </span>
                 </div>
 
                 <div className="c2-card-actions">
                   <button
-                    className="c2-btn c2-btn-go"
+                    className={`c2-btn c2-btn-go${isActive ? ' c2-btn-go--active' : ''}`}
                     type="button"
                     onClick={() => onGoToStream(summary.streamId)}
                   >
@@ -150,6 +178,37 @@ export function AlertsSidebar({
         })}
       </div>
     </aside>
+  )
+}
+
+function PersonIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="7" r="4" />
+      <path d="M5.5 21v-2a5 5 0 0 1 5-5h3a5 5 0 0 1 5 5v2" />
+    </svg>
+  )
+}
+
+function VehicleIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="1" y="10" width="22" height="8" rx="2" />
+      <path d="M5 10V7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v3" />
+      <circle cx="7" cy="18" r="2" /><circle cx="17" cy="18" r="2" />
+    </svg>
+  )
+}
+
+function DroneIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3" />
+      <line x1="5" y1="5" x2="9" y2="9" /><line x1="15" y1="9" x2="19" y2="5" />
+      <line x1="5" y1="19" x2="9" y2="15" /><line x1="15" y1="15" x2="19" y2="19" />
+      <circle cx="5" cy="5" r="2" /><circle cx="19" cy="5" r="2" />
+      <circle cx="5" cy="19" r="2" /><circle cx="19" cy="19" r="2" />
+    </svg>
   )
 }
 
@@ -191,12 +250,12 @@ function CompassPreview({ streamId }: { streamId: StreamId }) {
         </g>
       </svg>
 
-      <svg className="compass-mini-vehicle" viewBox="0 0 36 52" width="24" height="34" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect x="0" y="0" width="36" height="52" rx="6" ry="6" fill="rgba(80,80,80,0.6)" stroke="rgba(200,200,200,0.5)" strokeWidth="1"/>
-        <rect x="4" y="4" width="28" height="20" rx="3" ry="3" fill="none" stroke="rgba(200,200,200,0.3)" strokeWidth="0.6"/>
-        <rect x="4" y="28" width="28" height="20" rx="3" ry="3" fill="none" stroke="rgba(200,200,200,0.3)" strokeWidth="0.6"/>
-        <line x1="18" y1="0" x2="18" y2="52" stroke="rgba(200,200,200,0.15)" strokeWidth="0.5"/>
-      </svg>
+      <img
+        className="compass-mini-vehicle"
+        src={lidarSensorImg}
+        alt="LiDAR sensor"
+        draggable={false}
+      />
     </div>
   )
 }

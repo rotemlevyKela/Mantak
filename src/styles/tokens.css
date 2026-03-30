@@ -21,7 +21,7 @@
   --sidebar-width: 416px;
   --topbar-height: 46px;
   --font-ui:
-    'Helvetica Neue', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-mono: 'SFMono-Regular', Consolas, Monaco, monospace;
-  --font-tactical: 'Helvetica Neue', 'Arial Narrow', sans-serif;
+    'Inter', 'Helvetica Neue', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'Share Tech Mono', 'SFMono-Regular', Consolas, Monaco, monospace;
+  --font-tactical: 'Inter', 'Helvetica Neue', 'Arial Narrow', sans-serif;
 }

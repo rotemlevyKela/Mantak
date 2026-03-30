@@ -193,21 +193,38 @@ select {
 .c2-card {
   display: grid;
   grid-template-columns: 100px 1fr;
-  gap: 16px;
+  gap: 14px;
   align-items: center;
-  padding: 16px 12px;
+  padding: 14px 12px;
   border-bottom: 1px solid var(--border);
   position: relative;
-  transition: background 0.2s;
+  transition: background 0.2s, transform 0.2s, box-shadow 0.25s;
 }
 
 .c2-card:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.04);
+  transform: translateX(2px);
+  box-shadow: inset 0 0 30px rgba(255, 255, 255, 0.015);
 }
 
 .c2-card[data-active='true'] {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 0 40px rgba(255, 255, 255, 0.02);
 }
+
+@keyframes card-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.c2-card {
+  animation: card-enter 0.35s ease-out both;
+}
+
+.c2-card:nth-child(1) { animation-delay: 0s; }
+.c2-card:nth-child(2) { animation-delay: 0.06s; }
+.c2-card:nth-child(3) { animation-delay: 0.12s; }
+.c2-card:nth-child(4) { animation-delay: 0.18s; }
 
 /* Threat edge — smooth slide-in on hover and active */
 .c2-card::before {
@@ -311,14 +328,15 @@ select {
   letter-spacing: -0.32px;
 }
 
-/* Threat level tag */
+/* Threat level tag — pill style */
 .c2-threat-tag {
   font-size: 10px;
   font-weight: 600;
   font-family: var(--font-mono);
   letter-spacing: 0.8px;
-  padding: 2px 6px;
+  padding: 2px 8px;
   line-height: 1;
+  border-radius: 10px;
 }
 
 .c2-threat-tag[data-priority='critical'] {
@@ -377,6 +395,25 @@ select {
 .c2-count[data-priority='medium'] { background: #713f12; }
 .c2-count[data-priority='low'] { background: #14532d; }
 
+.c2-card-breakdown {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.c2-obj-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+}
+
+.c2-obj-badge svg {
+  opacity: 0.7;
+}
+
 .c2-card-timestamp {
   font-size: 13px;
   color: #dedede;
@@ -405,6 +442,7 @@ select {
   backdrop-filter: blur(4px);
   background: rgba(255, 255, 255, 0.05);
   border: 0.5px solid rgba(255, 255, 255, 0.5);
+  border-radius: 2px;
   overflow: hidden;
   transition: background 0.18s, border-color 0.18s, box-shadow 0.18s;
 }
@@ -424,6 +462,12 @@ select {
   flex-shrink: 0;
   border-left: 0.5px solid rgba(255, 255, 255, 0.12);
   transition: background 0.18s, border-color 0.18s;
+}
+
+.c2-btn-go--active {
+  border-color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.04);
 }
 
 .c2-btn-go:hover {
@@ -486,40 +530,65 @@ select {
 }
 
 .viewport-wrap {
-  position: relative;
   width: 100%;
   height: 100%;
-  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   background: #000;
+}
+
+/* ── Upper: LiDAR stream ── */
+
+.viewport-stream {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .viewport-canvas {
   width: 100%;
   height: 100%;
   display: block;
+  transition: opacity 0.18s ease;
 }
 
-/* ─── HUD top overlay ─── */
+.viewport-canvas--switching {
+  opacity: 0.6;
+}
 
-.viewport-hud-top {
+.viewport-stream-label {
   position: absolute;
-  bottom: 16px;
-  left: 24px;
-  right: 24px;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  pointer-events: none;
-  z-index: 2;
-}
-
-.viewport-label {
+  top: 12px;
+  left: 16px;
   font-family: var(--font-ui);
-  font-weight: 500;
-  font-size: clamp(14px, 1.6vw, 22px);
+  font-weight: 600;
+  font-size: clamp(15px, 1.6vw, 20px);
   letter-spacing: -0.02em;
   color: var(--text-primary);
   text-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+  z-index: 2;
+  white-space: nowrap;
+}
+
+.viewport-stream-count {
+  font-weight: 400;
+  font-size: 0.75em;
+  color: var(--text-secondary);
+  letter-spacing: 0;
+}
+
+.viewport-stats {
+  position: absolute;
+  bottom: 8px;
+  right: 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  color: rgba(255, 255, 255, 0.35);
+  pointer-events: none;
+  z-index: 2;
 }
 
 /* ─── Animated scanline ─── */
@@ -533,35 +602,37 @@ select {
   background: linear-gradient(
     to bottom,
     transparent 0%,
-    rgba(255, 200, 0, 0.15) 30%,
-    rgba(255, 200, 0, 0.4) 50%,
-    rgba(255, 200, 0, 0.15) 70%,
+    rgba(255, 200, 0, 0.1) 30%,
+    rgba(255, 200, 0, 0.3) 50%,
+    rgba(255, 200, 0, 0.1) 70%,
     transparent 100%
   );
   pointer-events: none;
   z-index: 1;
   animation: viewport-scanline 4s linear infinite;
-  opacity: 0.6;
+  opacity: 0.45;
 }
 
 @keyframes viewport-scanline {
   0%   { left: 0; opacity: 0; }
-  5%   { opacity: 0.6; }
-  95%  { opacity: 0.6; }
+  5%   { opacity: 0.45; }
+  95%  { opacity: 0.45; }
   100% { left: 100%; opacity: 0; }
 }
 
-/* ─── Compass + directional nav overlay ─── */
+/* ── Lower: Vehicle controller panel ── */
 
-.viewport-nav-overlay {
-  position: absolute;
-  bottom: 40px;
-  left: 50%;
-  transform: translateX(-50%);
+.viewport-controls {
+  height: 180px;
+  flex-shrink: 0;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border);
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 0;
-  pointer-events: none;
+  padding: 0 24px;
+  position: relative;
 }
 
 .nav-compass {
@@ -569,54 +640,68 @@ select {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 300px;
-  height: 320px;
+  width: 140px;
+  height: 140px;
+  flex-shrink: 0;
 }
 
 .compass-north {
   position: absolute;
-  top: 4px;
+  top: -12px;
   left: 50%;
   transform: translateX(-50%);
   color: var(--text-primary);
-  font-size: 18px;
+  font-size: 11px;
+  font-weight: 600;
   text-shadow: 0 0 7px rgba(255, 255, 255, 0.5);
   z-index: 2;
   pointer-events: none;
-  letter-spacing: 1px;
+  letter-spacing: 1.5px;
 }
 
 .compass-svg {
   display: block;
-  position: absolute;
-  inset: 0;
   width: 100%;
   height: 100%;
 }
 
-.compass-vehicle {
-  position: absolute;
-  z-index: 1;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -44%);
-  pointer-events: none;
-  filter: drop-shadow(0 0 18px rgba(0, 0, 0, 0.9));
+.compass-wedge-group {
+  transition: transform 0.6s cubic-bezier(0.33, 1, 0.68, 1);
 }
 
+/* ─── Compass connecting lines ─── */
+
+.compass-line {
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0),
+    rgba(255, 255, 255, 0.18),
+    rgba(255, 255, 255, 0)
+  );
+  pointer-events: none;
+  flex-shrink: 0;
+}
+
+.compass-line--left,
+.compass-line--right {
+  width: 40px;
+}
+
+/* ─── Nav buttons ─── */
+
 .nav-goto {
-  position: absolute;
-  pointer-events: auto;
   backdrop-filter: blur(6px);
   background: rgba(255, 255, 255, 0.05);
-  border: 0.7px solid rgba(255, 255, 255, 0.5);
+  border: 0.7px solid rgba(255, 255, 255, 0.35);
+  border-radius: 2px;
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: 12px;
   letter-spacing: 0.17px;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
+  gap: 5px;
+  padding: 6px 12px;
   cursor: pointer;
   white-space: nowrap;
   transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
@@ -624,22 +709,21 @@ select {
 
 .nav-goto:hover {
   background: rgba(255, 255, 255, 0.09);
-  border-color: rgba(255, 255, 255, 0.7);
+  border-color: rgba(255, 255, 255, 0.6);
   box-shadow: 0 0 14px rgba(255, 255, 255, 0.06);
 }
 
-.nav-goto-left {
-  right: calc(50% + 170px);
-  bottom: 100px;
+.nav-goto-arrow--flip {
+  transform: scaleX(-1);
 }
 
-.nav-goto-right {
-  left: calc(50% + 170px);
-  bottom: 100px;
+.nav-goto-arrow--down {
+  transform: rotate(90deg);
 }
 
-.nav-goto-down {
-  bottom: -30px;
+.nav-goto-back {
+  position: absolute;
+  bottom: 12px;
   left: 50%;
   transform: translateX(-50%);
 }
@@ -765,12 +849,37 @@ select {
 
 @media (prefers-reduced-motion: reduce) {
   .wedge-area,
-  .wedge-area-stroke {
+  .wedge-area-stroke,
+  .viewport-scanline-bar,
+  .c2-card {
     animation: none;
+  }
+
+  .viewport-canvas,
+  .compass-wedge-group,
+  .c2-card,
+  .nav-goto {
+    transition: none;
   }
 }
 
 /* ─── Responsive ─── */
+
+@media (max-width: 1200px) {
+  .viewport-controls {
+    height: 150px;
+  }
+
+  .nav-compass {
+    width: 120px;
+    height: 120px;
+  }
+
+  .compass-line--left,
+  .compass-line--right {
+    width: 30px;
+  }
+}
 
 @media (max-width: 900px) {
   .operator-layout {
@@ -792,29 +901,64 @@ select {
     grid-template-columns: 1fr;
   }
 
-  .viewport-label {
-    font-size: 16px;
+  .viewport-stream-label {
+    top: 10px;
+    left: 14px;
+    font-size: 14px;
   }
 
-  .viewport-hud-top {
-    left: 16px;
-    right: 16px;
-    bottom: 10px;
+  .viewport-controls {
+    height: 130px;
+  }
+
+  .nav-compass {
+    width: 100px;
+    height: 100px;
   }
 
   .nav-goto {
-    font-size: 12px;
-    padding: 6px 10px;
+    font-size: 11px;
+    padding: 5px 10px;
+  }
+
+  .compass-line--left,
+  .compass-line--right {
+    width: 20px;
+  }
+
+  .viewport-stats {
+    font-size: 10px;
   }
 
   .c2-card {
     grid-template-columns: 80px 1fr;
     gap: 10px;
-    padding: 14px 12px;
+    padding: 12px 10px;
   }
 
   .compass-mini {
     width: 76px;
     height: 76px;
+  }
+}
+
+@media (max-width: 768px) {
+  .viewport-controls {
+    height: 120px;
+  }
+
+  .compass-line {
+    display: none;
+  }
+
+  .nav-goto {
+    font-size: 11px;
+    padding: 4px 8px;
+    gap: 4px;
+  }
+
+  .nav-compass {
+    width: 90px;
+    height: 90px;
   }
 }

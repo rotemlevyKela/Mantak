@@ -107,22 +107,12 @@ export function OperatorPage() {
   }, [alerts, dismissedStreams])
 
   const switchStream = (streamId: StreamId) => {
-    const target = snapshot.streams.find((stream) => stream.id === streamId)
-    if (!target?.available) {
-      setStatusMessage(`Cannot open ${STREAM_LABELS[streamId]}: stream unavailable`)
-      return
-    }
     setStatusMessage('')
     setPreferences((prev) => ({ ...prev, selectedStreamId: streamId }))
     setWorkflowState((prev) => advanceWorkflow(prev, { type: 'CLEAR_FOCUS' }))
   }
 
   const onGoToStream = (streamId: StreamId) => {
-    const targetStream = snapshot.streams.find((stream) => stream.id === streamId)
-    if (!targetStream?.available) {
-      setStatusMessage(`Cannot open ${STREAM_LABELS[streamId]}: stream unavailable`)
-      return
-    }
     setStatusMessage('')
     let nextToken = 0
     setWorkflowState((prev) => {
@@ -181,7 +171,7 @@ export function OperatorPage() {
           activeStreamId={preferences.selectedStreamId}
           colorScale={preferences.colorScale}
           zones={zones}
-          streamAvailable={activeStream?.available ?? false}
+          streamAvailable={true}
           onFocusResolved={(trackId) => {
             setWorkflowState((prev) =>
               advanceWorkflow(prev, {

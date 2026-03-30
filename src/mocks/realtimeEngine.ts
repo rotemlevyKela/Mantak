@@ -19,6 +19,13 @@ const OBJECT_TYPES: ObjectType[] = ['man', 'drone', 'vehicle']
 const rand = (min: number, max: number) => min + Math.random() * (max - min)
 const pick = <T,>(items: T[]) => items[Math.floor(Math.random() * items.length)]
 
+const QUADRANT_RANGES: Record<StreamId, { xDir: number; xMin: number; xMax: number; zDir: number; zMin: number; zMax: number }> = {
+  front: { xDir: 1, xMin: -20, xMax: 20, zDir: -1, zMin: 8, zMax: 42 },
+  right: { xDir: 1, xMin: 8, xMax: 42, zDir: 1, zMin: -15, zMax: 15 },
+  back:  { xDir: 1, xMin: -20, xMax: 20, zDir: 1, zMin: 8, zMax: 42 },
+  left:  { xDir: -1, xMin: 8, xMax: 42, zDir: 1, zMin: -15, zMax: 15 },
+}
+
 interface EngineState {
   tracksByStream: Record<StreamId, TrackedObject[]>
   streams: LidarStream[]
@@ -83,10 +90,6 @@ export class MockRealtimeEngine {
 
   private tick() {
     const now = Date.now()
-    if (Math.random() < 0.03) {
-      const stream = pick(this.state.streams)
-      stream.available = !stream.available
-    }
 
     for (const streamId of STREAM_ORDER) {
       const streamTracks = this.state.tracksByStream[streamId]
@@ -180,9 +183,13 @@ export class MockRealtimeEngine {
 
   private seedTracks(streamId: StreamId, count: number): TrackedObject[] {
     const now = Date.now() - rand(12_000, 60_000)
+    const quadrant = QUADRANT_RANGES[streamId]
     return Array.from({ length: count }).map((_, index) => {
       const objectType = pick(OBJECT_TYPES)
       const dynamic = Math.random() > 0.35
+      const dist = rand(8, 45)
+      const x = quadrant.xDir * rand(quadrant.xMin, quadrant.xMax)
+      const z = quadrant.zDir * rand(quadrant.zMin, quadrant.zMax)
       return {
         trackId: `${streamId}-track-${index + 1}`,
         streamId,
@@ -195,14 +202,10 @@ export class MockRealtimeEngine {
           heightM: Number(rand(1.4, 6.2).toFixed(1)),
           lengthM: Number(rand(1.8, 9.5).toFixed(1)),
         },
-        position: {
-          x: rand(-90, 90),
-          y: rand(-90, 90),
-          z: rand(-3, 7),
-        },
+        position: { x, y: rand(0, 5), z },
         distance: {
-          distanceM: rand(6, 120),
-          azimuthDeg: rand(0, 360),
+          distanceM: dist,
+          azimuthDeg: ((Math.atan2(z, x) * 180) / Math.PI + 360) % 360,
         },
       }
     })
