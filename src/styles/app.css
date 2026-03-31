@@ -668,9 +668,9 @@ button, input, select { font: inherit; color: inherit; }
 .t-alert-log-entry {
   display: flex;
   gap: 14px;
-  padding: 0 0 0 4px;
+  padding: 4px 6px 4px 6px;
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: 10px;
   transition: background 0.15s;
 }
 
@@ -690,14 +690,14 @@ button, input, select { font: inherit; color: inherit; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: 14px;
+  width: 16px;
   flex-shrink: 0;
-  padding-top: 8px;
+  padding-top: 12px;
 }
 
 .t-alert-log-dot {
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   flex-shrink: 0;
 }
@@ -716,8 +716,8 @@ button, input, select { font: inherit; color: inherit; }
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 6px 0 16px;
+  gap: 6px;
+  padding: 10px 0 20px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
   min-width: 0;
 }
@@ -733,17 +733,17 @@ button, input, select { font: inherit; color: inherit; }
 .t-alert-log-row-top,
 .t-alert-log-row-bottom {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
 }
 
 .t-alert-log-stream {
   font-family: var(--font-ui);
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 500;
   color: #fff;
-  letter-spacing: -0.32px;
+  letter-spacing: -0.36px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -754,28 +754,43 @@ button, input, select { font: inherit; color: inherit; }
   font-weight: 600;
   color: rgba(255, 255, 255, 0.35);
   background: rgba(255, 255, 255, 0.06);
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: 3px 7px;
+  border-radius: 5px;
   letter-spacing: 0.5px;
 }
 
 .t-alert-log-time {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 14px;
   color: rgba(255, 255, 255, 0.35);
   font-variant-numeric: tabular-nums;
 }
 
 .t-alert-log-object {
   font-family: var(--font-ui);
-  font-size: 14px;
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: -0.3px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.t-alert-log-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
   color: rgba(255, 255, 255, 0.45);
-  letter-spacing: -0.28px;
+  flex-shrink: 0;
 }
 
 .t-alert-log-position {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 14px;
   color: rgba(255, 255, 255, 0.25);
   font-variant-numeric: tabular-nums;
 }
