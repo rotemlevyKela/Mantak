@@ -29,6 +29,7 @@ export function OperatorPage() {
   const normalizerStateRef = useRef(createNormalizerState())
   const queueRef = useRef<AlertEvent[]>([])
   const lastAudioMsRef = useRef(0)
+  const prevActiveStreamsRef = useRef<Set<StreamId>>(new Set())
 
   useEffect(() => {
     engine.setZones(zones)
@@ -54,6 +55,27 @@ export function OperatorPage() {
   }, [])
 
   useEffect(() => { writePreferences(preferences) }, [preferences])
+
+  const [alertFlash, setAlertFlash] = useState(false)
+
+  useEffect(() => {
+    const currentActive = new Set(
+      STREAM_ORDER.filter((id) => snapshot.tracksByStream[id].length > 0),
+    )
+    const prev = prevActiveStreamsRef.current
+    let newStreamDetected: StreamId | null = null
+    for (const streamId of currentActive) {
+      if (!prev.has(streamId)) {
+        newStreamDetected = streamId
+      }
+    }
+    if (newStreamDetected) {
+      setPreferences((p) => ({ ...p, selectedStreamId: newStreamDetected! }))
+      setAlertFlash(true)
+      window.setTimeout(() => setAlertFlash(false), 5000)
+    }
+    prevActiveStreamsRef.current = currentActive
+  }, [snapshot.tracksByStream])
 
   useEffect(() => {
     if (!preferences.soundEnabled) return
@@ -126,7 +148,8 @@ export function OperatorPage() {
   )
 
   return (
-    <div className="t-shell">
+    <div className={`t-shell${alertFlash ? ' t-shell--alert-flash' : ''}`}>
+      {alertFlash && <div className="t-alert-flash-overlay" />}
       <StatusBar
         tracksByStream={snapshot.tracksByStream}
         activeStreamId={preferences.selectedStreamId}
@@ -156,6 +179,7 @@ export function OperatorPage() {
             alerts={visibleAlerts}
             tracksByStream={snapshot.tracksByStream}
             activeStreamId={preferences.selectedStreamId}
+            alertFlash={alertFlash}
             onGoToStream={onGoToStream}
           />
         </div>

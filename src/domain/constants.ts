@@ -1,12 +1,12 @@
 import type { Priority, StreamId } from './types'
 
-export const STREAM_ORDER: StreamId[] = ['front', 'left', 'back', 'right']
+export const STREAM_ORDER: StreamId[] = ['front', 'right', 'left', 'back']
 
 export const STREAM_LABELS: Record<StreamId, string> = {
-  front: 'Front side',
-  left: 'Left side',
-  back: 'Back side',
-  right: 'Right side',
+  front: 'Front Side',
+  left: 'Left Side',
+  back: 'Back Side',
+  right: 'Right Side',
 }
 
 export const PRIORITY_WEIGHT: Record<Priority, number> = {

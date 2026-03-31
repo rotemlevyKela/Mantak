@@ -28,7 +28,7 @@ export function DockBar({ activeStreamId, totalDetections, onSwitchStream }: Doc
               className={`t-dock-pill${id === activeStreamId ? ' t-dock-pill--active' : ''}`}
               onClick={() => onSwitchStream(id)}
             >
-              {STREAM_LABELS[id].replace(' side', '')}
+              {STREAM_LABELS[id].replace(/ Side$/i, '')}
             </button>
           ))}
         </div>

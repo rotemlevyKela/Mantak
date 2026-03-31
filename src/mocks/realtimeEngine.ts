@@ -3,7 +3,6 @@ import type {
   AlertEvent, AppSnapshot, LidarStream,
   ObjectType, Priority, StreamId, TrackedObject,
 } from '../domain/types'
-import { shouldAlertForPoint } from '../lib/zonePolicy'
 import type { InterestArea } from '../domain/types'
 
 type Subscriber = (snapshot: AppSnapshot) => void
@@ -15,11 +14,14 @@ const rand = (min: number, max: number) => min + Math.random() * (max - min)
 const pick = <T,>(items: T[]) => items[Math.floor(Math.random() * items.length)]
 
 const QUADRANT_RANGES: Record<StreamId, { xMin: number; xMax: number; zMin: number; zMax: number }> = {
-  front: { xMin: -20, xMax: 20, zMin: -42, zMax: -8 },
-  right: { xMin: 8, xMax: 42, zMin: -15, zMax: 15 },
-  back:  { xMin: -20, xMax: 20, zMin: 8, zMax: 42 },
-  left:  { xMin: -42, xMax: -8, zMin: -15, zMax: 15 },
+  front: { xMin: -15, xMax: 15, zMin: -52, zMax: -30 },
+  right: { xMin: 30, xMax: 52, zMin: -15, zMax: 15 },
+  back:  { xMin: -15, xMax: 15, zMin: 30, zMax: 52 },
+  left:  { xMin: -52, xMax: -30, zMin: -15, zMax: 15 },
 }
+
+const STAGE_1_MS = 12_000
+const STAGE_2_MS = 24_000
 
 interface EngineState {
   tracksByStream: Record<StreamId, TrackedObject[]>
@@ -34,6 +36,8 @@ export class MockRealtimeEngine {
   private seq = 0
   private zones: InterestArea[] = []
   private startTime = Date.now()
+  private stage1Fired = false
+  private stage2Fired = false
 
   constructor() {
     this.state = {
@@ -43,7 +47,6 @@ export class MockRealtimeEngine {
       tracksByStream: { front: [], left: [], back: [], right: [] },
       alerts: [],
     }
-    this.state.tracksByStream.front = this.seedTracks('front', 1)
   }
 
   setZones(zones: InterestArea[]) { this.zones = zones }
@@ -65,8 +68,18 @@ export class MockRealtimeEngine {
     const now = Date.now()
     const elapsed = now - this.startTime
 
-    if (elapsed > 8000 && this.state.tracksByStream.left.length === 0) {
-      this.state.tracksByStream.left = this.seedTracks('left', 2)
+    if (!this.stage1Fired && elapsed >= STAGE_1_MS) {
+      this.stage1Fired = true
+      this.state.tracksByStream.front = this.seedTracks('front', 1)
+      this.forceEmitAlerts('front', now)
+    }
+
+    if (!this.stage2Fired && elapsed >= STAGE_2_MS) {
+      this.stage2Fired = true
+      this.state.tracksByStream.left = this.seedTracks('left', 1)
+      this.state.tracksByStream.back = this.seedTracks('back', 1)
+      this.forceEmitAlerts('left', now)
+      this.forceEmitAlerts('back', now)
     }
 
     for (const streamId of STREAM_ORDER) {
@@ -82,12 +95,14 @@ export class MockRealtimeEngine {
       }
     }
 
-    const emitted = this.maybeEmitAlerts(now)
-    if (emitted.length) {
-      this.state.alerts = [...emitted, ...this.state.alerts].slice(0, 120)
-    }
-
     for (const subscriber of this.subscribers) subscriber(this.snapshot())
+  }
+
+  private forceEmitAlerts(streamId: StreamId, now: number) {
+    for (const track of this.state.tracksByStream[streamId]) {
+      const alert = this.createAlertFromTrack(track, now)
+      this.state.alerts = [alert, ...this.state.alerts].slice(0, 120)
+    }
   }
 
   private snapshot(): AppSnapshot {
@@ -107,26 +122,9 @@ export class MockRealtimeEngine {
     }
   }
 
-  private maybeEmitAlerts(now: number): AlertEvent[] {
-    const emitted: AlertEvent[] = []
-    for (const streamId of STREAM_ORDER) {
-      const streamTracks = this.state.tracksByStream[streamId]
-      if (!streamTracks.length) continue
-      if (Math.random() < 0.03) {
-        const target = pick(streamTracks)
-        const alert = this.createAlertFromTrack(target, now)
-        if (shouldAlertForPoint(target.position.x, target.position.y, this.zones)) {
-          emitted.push(alert)
-        }
-      }
-    }
-    return emitted
-  }
-
   private createAlertFromTrack(track: TrackedObject, now: number): AlertEvent {
     this.seq += 1
-    const priority = PRIORITIES[Math.floor(Math.random() * PRIORITIES.length)]
-    const maybeOutOfOrder = Math.random() < 0.1 ? now - rand(350, 1400) : now
+    const priority: Priority = this.seq === 1 ? 'high' : pick(PRIORITIES)
     return {
       alertId: `alert-${this.seq}`,
       trackId: track.trackId,
@@ -136,15 +134,15 @@ export class MockRealtimeEngine {
       motionState: track.motionState,
       velocityMps: Number(track.velocityMps.toFixed(1)),
       firstDetectedAt: track.firstDetectedAt,
-      detectedAt: maybeOutOfOrder,
+      detectedAt: now,
       distance: { ...track.distance, distanceM: Number(track.distance.distanceM.toFixed(1)), azimuthDeg: Number(track.distance.azimuthDeg.toFixed(1)) },
       dimensions: track.dimensions,
-      snapshotUrl: Math.random() > 0.25 ? createMockSnapshot(track.objectType, track.streamId) : undefined,
+      snapshotUrl: createMockSnapshot(track.objectType, track.streamId),
     }
   }
 
   private seedTracks(streamId: StreamId, count: number): TrackedObject[] {
-    const now = Date.now() - rand(12_000, 60_000)
+    const now = Date.now()
     const q = QUADRANT_RANGES[streamId]
     return Array.from({ length: count }).map((_, i) => {
       const objectType = pick(OBJECT_TYPES)
@@ -156,7 +154,7 @@ export class MockRealtimeEngine {
         streamId, objectType,
         motionState: dynamic ? 'dynamic' as const : 'static' as const,
         velocityMps: dynamic ? rand(1.5, 13.5) : rand(0, 0.4),
-        firstDetectedAt: now - rand(1000, 45_000),
+        firstDetectedAt: now,
         lastSeenAt: now,
         dimensions: { heightM: Number(rand(1.4, 6.2).toFixed(1)), lengthM: Number(rand(1.8, 9.5).toFixed(1)) },
         position: { x, y: rand(0, 5), z },

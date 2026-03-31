@@ -6,6 +6,7 @@ interface AlertStreamProps {
   alerts: AlertEvent[]
   tracksByStream: Record<StreamId, TrackedObject[]>
   activeStreamId: StreamId
+  alertFlash: boolean
   onGoToStream: (streamId: StreamId) => void
 }
 
@@ -13,24 +14,34 @@ export function AlertStream({
   alerts,
   tracksByStream,
   activeStreamId,
+  alertFlash,
   onGoToStream,
 }: AlertStreamProps) {
+  const activeStreams = STREAM_ORDER.filter((id) => tracksByStream[id].length > 0)
+
+  if (activeStreams.length === 0) {
+    return (
+      <div className="t-alert-stream">
+        <div className="t-alert-stream-empty">No LiDAR Detections</div>
+      </div>
+    )
+  }
+
   return (
     <div className="t-alert-stream">
       <div className="t-alert-stream-list">
-        {STREAM_ORDER.map((streamId, idx) => {
-          const isActive = streamId === activeStreamId
+        {activeStreams.map((streamId, idx) => {
+          const isSelected = streamId === activeStreamId
           const trackCount = tracksByStream[streamId].length
           const streamAlerts = alerts.filter((a) => a.streamId === streamId)
           const latestTime = streamAlerts.length
             ? Math.max(...streamAlerts.map((a) => a.detectedAt))
             : null
-          const hasDetections = trackCount > 0
 
           return (
             <div
               key={streamId}
-              className={`t-alert-card${isActive ? ' t-alert-card--active' : ''}${hasDetections ? ' t-alert-card--detecting' : ''}`}
+              className={`t-alert-card${alertFlash ? ' t-alert-card--detecting' : ''}${isSelected ? ' t-alert-card--selected' : ''}`}
               style={{ animationDelay: `${idx * 0.08}s` }}
               onClick={() => onGoToStream(streamId)}
             >
@@ -44,12 +55,12 @@ export function AlertStream({
                   <p className="t-alert-card-sub">
                     {latestTime
                       ? `Last Detected ${formatClock(latestTime)}`
-                      : 'No detections'}
+                      : 'Detecting...'}
                   </p>
                 </div>
 
                 <div className="t-alert-card-badges">
-                  <div className={`t-alert-badge${hasDetections ? '' : ' t-alert-badge--dim'}`}>
+                  <div className="t-alert-badge">
                     <span>{trackCount}</span>
                   </div>
                 </div>
