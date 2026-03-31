@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { STREAM_ORDER } from '../../../domain/constants'
-import type { StreamId, TrackedObject } from '../../../domain/types'
+import type { AlertEvent, StreamId, TrackedObject } from '../../../domain/types'
 import lidarSensorImg from '../../../assets/lidar-sensor.png'
 
 interface DetectionMapProps {
@@ -8,6 +8,7 @@ interface DetectionMapProps {
   activeStreamId: StreamId
   onSwitchStream: (streamId: StreamId) => void
   focusedTrackId?: string
+  highlightedAlert?: AlertEvent | null
 }
 
 const CX = 300
@@ -48,6 +49,7 @@ export function DetectionMap({
   activeStreamId,
   onSwitchStream,
   focusedTrackId,
+  highlightedAlert,
 }: DetectionMapProps) {
   const allTracks = useMemo(
     () => STREAM_ORDER.flatMap((id) => tracksByStream[id]),
@@ -141,24 +143,40 @@ export function DetectionMap({
           const dy = CY + track.position.z * scale
           const dist = horizDist(track)
           const focused = track.trackId === focusedTrackId
+          const isHighlighted = highlightedAlert?.trackId === track.trackId
           const showLabel = labelledIds.has(track.trackId)
 
           return (
             <g key={track.trackId}>
               <circle cx={dx} cy={dy} r="14"
                 fill="rgba(239,68,68,0.12)" filter="url(#dm-blur)" />
-              {focused && (
+              {(focused || isHighlighted) && (
                 <circle cx={dx} cy={dy} r="12"
-                  fill="none" stroke="#ef4444" strokeWidth="1.5" opacity="0.5">
-                  <animate attributeName="r" values="10;14;10" dur="2s" repeatCount="indefinite" />
-                  <animate attributeName="opacity" values="0.5;0.2;0.5" dur="2s" repeatCount="indefinite" />
+                  fill="none" stroke={isHighlighted ? '#fff' : '#ef4444'} strokeWidth={isHighlighted ? 2 : 1.5} opacity={isHighlighted ? 0.9 : 0.5}>
+                  <animate attributeName="r" values="10;16;10" dur="2s" repeatCount="indefinite" />
+                  <animate attributeName="opacity" values="0.9;0.3;0.9" dur="2s" repeatCount="indefinite" />
                 </circle>
               )}
-              <circle cx={dx} cy={dy} r={focused ? 6 : 4.5}
-                fill="#ef4444" opacity={focused ? 1 : 0.85} />
+              {isHighlighted && (
+                <>
+                  <circle cx={dx} cy={dy} r="20"
+                    fill="none" stroke="#fff" strokeWidth="1" opacity="0.3">
+                    <animate attributeName="r" values="16;24;16" dur="2.5s" repeatCount="indefinite" />
+                    <animate attributeName="opacity" values="0.3;0;0.3" dur="2.5s" repeatCount="indefinite" />
+                  </circle>
+                  <circle cx={dx} cy={dy} r={7}
+                    fill="#fff" opacity="0.95" />
+                  <circle cx={dx} cy={dy} r={3.5}
+                    fill="#ef4444" />
+                </>
+              )}
+              {!isHighlighted && (
+                <circle cx={dx} cy={dy} r={focused ? 6 : 4.5}
+                  fill="#ef4444" opacity={focused ? 1 : 0.85} />
+              )}
               {showLabel && (
-                <text x={dx} y={dy - 14} textAnchor="middle"
-                  fill="#fff" fontSize="13" fontWeight="600"
+                <text x={dx} y={dy - (isHighlighted ? 24 : 14)} textAnchor="middle"
+                  fill={isHighlighted ? '#fff' : '#fff'} fontSize={isHighlighted ? 14 : 13} fontWeight="600"
                   fontFamily="var(--font-ui)" opacity="0.95"
                   style={{ textShadow: '0 1px 6px rgba(0,0,0,0.9)' }}>
                   {Math.round(dist)}m

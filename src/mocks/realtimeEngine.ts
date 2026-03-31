@@ -22,6 +22,7 @@ const QUADRANT_RANGES: Record<StreamId, { xMin: number; xMax: number; zMin: numb
 
 const STAGE_1_MS = 12_000
 const STAGE_2_MS = 24_000
+const STAGE_3_MS = 30_000
 
 interface EngineState {
   tracksByStream: Record<StreamId, TrackedObject[]>
@@ -38,6 +39,7 @@ export class MockRealtimeEngine {
   private startTime = Date.now()
   private stage1Fired = false
   private stage2Fired = false
+  private stage3Fired = false
 
   constructor() {
     this.state = {
@@ -79,6 +81,14 @@ export class MockRealtimeEngine {
       this.state.tracksByStream.left = this.seedTracks('left', 1)
       this.state.tracksByStream.back = this.seedTracks('back', 1)
       this.forceEmitAlerts('left', now)
+      this.forceEmitAlerts('back', now)
+    }
+
+    if (!this.stage3Fired && elapsed >= STAGE_3_MS) {
+      this.stage3Fired = true
+      const extraBack = this.seedTracks('back', 1)
+      extraBack.forEach((t, i) => { t.trackId = `back-track-${this.state.tracksByStream.back.length + i + 1}` })
+      this.state.tracksByStream.back = [...this.state.tracksByStream.back, ...extraBack]
       this.forceEmitAlerts('back', now)
     }
 
@@ -126,7 +136,7 @@ export class MockRealtimeEngine {
     this.seq += 1
     const priority: Priority = this.seq === 1 ? 'high' : pick(PRIORITIES)
     return {
-      alertId: `alert-${this.seq}`,
+      alertId: `alert-${this.seq}-${Date.now()}`,
       trackId: track.trackId,
       streamId: track.streamId,
       objectType: track.objectType,

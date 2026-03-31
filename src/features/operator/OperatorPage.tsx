@@ -9,6 +9,7 @@ import { StatusBar } from './components/StatusBar'
 import { DetectionMap } from './components/DetectionMap'
 import { LidarViewport } from './components/LidarViewport'
 import { AlertStream } from './components/AlertStream'
+import { AlertLogPanel } from './components/AlertLogPanel'
 import { DockBar } from './components/DockBar'
 
 const engine = new MockRealtimeEngine()
@@ -26,6 +27,8 @@ export function OperatorPage() {
   const [workflowState, setWorkflowState] = useState<WorkflowState>(createWorkflowState())
   const [alerts, setAlerts] = useState<AlertEvent[]>([])
   const [swapped, setSwapped] = useState(false)
+  const [logPanelOpen, setLogPanelOpen] = useState(false)
+  const [selectedLogAlertId, setSelectedLogAlertId] = useState<string | null>(null)
   const normalizerStateRef = useRef(createNormalizerState())
   const queueRef = useRef<AlertEvent[]>([])
   const lastAudioMsRef = useRef(0)
@@ -124,6 +127,9 @@ export function OperatorPage() {
 
   const activeTracks = snapshot.tracksByStream[preferences.selectedStreamId]
   const activeLabel = STREAM_LABELS[preferences.selectedStreamId].replace(' side', ' View')
+  const selectedLogAlert = selectedLogAlertId
+    ? visibleAlerts.find((a) => a.alertId === selectedLogAlertId) ?? null
+    : null
 
   const detectionMapEl = (
     <DetectionMap
@@ -131,6 +137,7 @@ export function OperatorPage() {
       activeStreamId={preferences.selectedStreamId}
       onSwitchStream={switchStream}
       focusedTrackId={workflowState.focusTrackId}
+      highlightedAlert={selectedLogAlert}
     />
   )
 
@@ -182,6 +189,17 @@ export function OperatorPage() {
             alertFlash={alertFlash}
             onGoToStream={onGoToStream}
           />
+          <AlertLogPanel
+            alerts={visibleAlerts}
+            open={logPanelOpen}
+            now={snapshot.now}
+            onClose={() => { setLogPanelOpen(false); setSelectedLogAlertId(null) }}
+            onSelectAlert={(alert) => {
+              setSelectedLogAlertId(alert?.alertId ?? null)
+              if (alert) switchStream(alert.streamId)
+            }}
+            selectedAlertId={selectedLogAlertId}
+          />
         </div>
       </div>
 
@@ -189,6 +207,7 @@ export function OperatorPage() {
         activeStreamId={preferences.selectedStreamId}
         totalDetections={totalDetections}
         onSwitchStream={switchStream}
+        onToggleLog={() => setLogPanelOpen((o) => !o)}
       />
     </div>
   )
