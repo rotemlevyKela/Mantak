@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react'
 import { STREAM_LABELS } from '../../../domain/constants'
 import type { AlertEvent, ObjectType, StreamId } from '../../../domain/types'
 import { formatClock, formatElapsed } from '../../../lib/time'
@@ -25,7 +26,7 @@ const OBJECT_LABEL: Record<string, string> = {
 }
 
 function ObjectIcon({ type }: { type: ObjectType }) {
-  const size = 20
+  const size = 36
   const props = { width: size, height: size, viewBox: '0 0 24 24', fill: 'currentColor' }
 
   switch (type) {
@@ -58,10 +59,42 @@ function ObjectIcon({ type }: { type: ObjectType }) {
   }
 }
 
+const NEW_ALERT_DURATION_MS = 3000
+
 export function AlertLogPanel({ alerts, open, now, onClose, onSelectAlert, selectedAlertId }: AlertLogPanelProps) {
   const selectedAlert = selectedAlertId
     ? alerts.find((a) => a.alertId === selectedAlertId) ?? null
     : null
+
+  const seenIdsRef = useRef<Set<string>>(new Set())
+  const [flashingIds, setFlashingIds] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    const newIds: string[] = []
+    for (const alert of alerts) {
+      if (!seenIdsRef.current.has(alert.alertId)) {
+        seenIdsRef.current.add(alert.alertId)
+        newIds.push(alert.alertId)
+      }
+    }
+    if (newIds.length === 0) return
+
+    setFlashingIds((prev) => {
+      const next = new Set(prev)
+      for (const id of newIds) next.add(id)
+      return next
+    })
+
+    const timer = window.setTimeout(() => {
+      setFlashingIds((prev) => {
+        const next = new Set(prev)
+        for (const id of newIds) next.delete(id)
+        return next
+      })
+    }, NEW_ALERT_DURATION_MS)
+
+    return () => window.clearTimeout(timer)
+  }, [alerts])
 
   return (
     <div className={`t-alert-log${open ? ' t-alert-log--open' : ''}`}>
@@ -98,12 +131,13 @@ export function AlertLogPanel({ alerts, open, now, onClose, onSelectAlert, selec
         ) : (
           alerts.map((alert) => {
             const isSelected = alert.alertId === selectedAlertId
+            const isFlashing = flashingIds.has(alert.alertId)
             const direction = STREAM_LABELS[alert.streamId].replace(/ Side$/i, '')
 
             return (
               <div
                 key={alert.alertId}
-                className={`t-alert-log-entry${isSelected ? ' t-alert-log-entry--selected' : ''}`}
+                className={`t-alert-log-entry${isSelected ? ' t-alert-log-entry--selected' : ''}${isFlashing ? ' t-alert-log-entry--new' : ''}`}
                 onClick={() => onSelectAlert(isSelected ? null : alert)}
               >
                 <div className="t-alert-log-rail">
@@ -112,6 +146,10 @@ export function AlertLogPanel({ alerts, open, now, onClose, onSelectAlert, selec
                     style={{ background: STREAM_DOT_COLOR[alert.streamId] }}
                   />
                   <span className="t-alert-log-line" />
+                </div>
+
+                <div className="t-alert-log-icon">
+                  <ObjectIcon type={alert.objectType} />
                 </div>
 
                 <div className="t-alert-log-content">
@@ -126,9 +164,6 @@ export function AlertLogPanel({ alerts, open, now, onClose, onSelectAlert, selec
                   </div>
                   <div className="t-alert-log-row-bottom">
                     <span className="t-alert-log-object">
-                      <span className="t-alert-log-icon">
-                        <ObjectIcon type={alert.objectType} />
-                      </span>
                       {OBJECT_LABEL[alert.objectType] ?? alert.objectType}
                     </span>
                     <span className="t-alert-log-position">

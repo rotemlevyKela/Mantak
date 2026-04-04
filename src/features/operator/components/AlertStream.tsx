@@ -41,7 +41,7 @@ export function AlertStream({
           return (
             <div
               key={streamId}
-              className={`t-alert-card${alertFlash ? ' t-alert-card--detecting' : ''}${isSelected ? ' t-alert-card--selected' : ''}`}
+              className={`t-alert-card${isSelected ? ' t-alert-card--selected' : ''}`}
               style={{ animationDelay: `${idx * 0.08}s` }}
               onClick={() => onGoToStream(streamId)}
             >

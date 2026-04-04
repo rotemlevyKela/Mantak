@@ -389,6 +389,11 @@ button, input, select { font: inherit; color: inherit; }
   to   { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes alertCardRedFlash {
+  0%, 30% { outline-color: #ef4444; }
+  100%    { outline-color: transparent; }
+}
+
 @keyframes alertFlashPulse {
   0%   { opacity: 0.35; }
   10%  { opacity: 0.25; }
@@ -432,17 +437,15 @@ button, input, select { font: inherit; color: inherit; }
   height: 80px;
   flex-shrink: 0;
   cursor: pointer;
-  animation: alertSlideIn 0.4s var(--ease-out) both;
+  outline: 3px solid transparent;
+  outline-offset: -1px;
+  animation: alertSlideIn 0.4s var(--ease-out) both, alertCardRedFlash 4s ease-out forwards;
   transition: border-color 0.2s, transform 0.15s;
 }
 
 .t-alert-card:hover {
   border-color: #444;
   transform: scale(1.01);
-}
-
-.t-alert-card--detecting {
-  border-color: #8c0000;
 }
 
 .t-alert-card--selected {
@@ -686,6 +689,22 @@ button, input, select { font: inherit; color: inherit; }
   background: rgba(255, 255, 255, 0.08);
 }
 
+.t-alert-log-entry--new {
+  animation: alert-new-flash 3s ease-out forwards;
+}
+
+@keyframes alert-new-flash {
+  0% {
+    box-shadow: inset 0 0 0 2px rgba(239, 68, 68, 0.9), 0 0 12px rgba(239, 68, 68, 0.3);
+  }
+  60% {
+    box-shadow: inset 0 0 0 2px rgba(239, 68, 68, 0.5), 0 0 8px rgba(239, 68, 68, 0.15);
+  }
+  100% {
+    box-shadow: inset 0 0 0 2px rgba(239, 68, 68, 0), 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
+
 .t-alert-log-rail {
   display: flex;
   flex-direction: column;
@@ -780,12 +799,13 @@ button, input, select { font: inherit; color: inherit; }
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
   background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.45);
+  color: rgba(255, 255, 255, 0.5);
   flex-shrink: 0;
+  align-self: center;
 }
 
 .t-alert-log-position {
