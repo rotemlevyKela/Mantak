@@ -67,7 +67,7 @@ export function AlertStream({
   alerts,
   tracksByStream,
   activeStreamId,
-  alertFlash,
+  alertFlash: _alertFlash,
   onGoToStream,
 }: AlertStreamProps) {
   const activeStreams = STREAM_ORDER.filter((id) => tracksByStream[id].length > 0)

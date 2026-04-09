@@ -23,7 +23,7 @@ export function OperatorPage() {
   }))
   const [preferences, setPreferences] = useState(() => readPreferences())
   const [zones, setZones] = useState<InterestArea[]>(() => readZones())
-  const [dismissedStreams, setDismissedStreams] = useState<StreamId[]>([])
+  const [dismissedStreams, _setDismissedStreams] = useState<StreamId[]>([])
   const [workflowState, setWorkflowState] = useState<WorkflowState>(createWorkflowState())
   const [alerts, setAlerts] = useState<AlertEvent[]>([])
   const [swapped, setSwapped] = useState(false)

@@ -35,6 +35,7 @@ export class MockRealtimeEngine {
   private timer?: number
   private state: EngineState
   private seq = 0
+  // @ts-expect-error reserved for future zone-based filtering
   private zones: InterestArea[] = []
   private startTime = Date.now()
   private stage1Fired = false

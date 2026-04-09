@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { STREAM_COLORS, STREAM_LABELS } from '../../../domain/constants'
-import type { AlertEvent, ObjectType, StreamId } from '../../../domain/types'
+import type { AlertEvent, ObjectType } from '../../../domain/types'
 import { formatClock, formatElapsed } from '../../../lib/time'
 
 interface AlertLogPanelProps {
