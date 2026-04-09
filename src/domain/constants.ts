@@ -22,3 +22,10 @@ export const DETECTION_COLORS: Record<Priority, string> = {
   medium: '#f2cf52',
   low: '#68b06a',
 }
+
+export const STREAM_COLORS: Record<StreamId, string> = {
+  front: '#ef4444',
+  right: '#f59e0b',
+  left: '#3b82f6',
+  back: '#a855f7',
+}

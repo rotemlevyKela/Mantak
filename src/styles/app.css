@@ -467,12 +467,20 @@ button, input, select { font: inherit; color: inherit; }
   );
 }
 
+.t-alert-card-direction {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-left: 10px;
+  flex-shrink: 0;
+}
+
 .t-alert-card-body {
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 8px 12px 14px;
+  padding: 12px 8px 12px 8px;
   gap: 14px;
 }
 

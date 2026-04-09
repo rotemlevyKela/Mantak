@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { STREAM_LABELS } from '../../../domain/constants'
+import { STREAM_COLORS, STREAM_LABELS } from '../../../domain/constants'
 import type { AlertEvent, ObjectType, StreamId } from '../../../domain/types'
 import { formatClock, formatElapsed } from '../../../lib/time'
 
@@ -10,13 +10,6 @@ interface AlertLogPanelProps {
   onClose: () => void
   onSelectAlert: (alert: AlertEvent | null) => void
   selectedAlertId: string | null
-}
-
-const STREAM_DOT_COLOR: Record<StreamId, string> = {
-  front: '#ef4444',
-  right: '#f59e0b',
-  left: '#3b82f6',
-  back: '#a855f7',
 }
 
 const OBJECT_LABEL: Record<string, string> = {
@@ -143,7 +136,7 @@ export function AlertLogPanel({ alerts, open, now, onClose, onSelectAlert, selec
                 <div className="t-alert-log-rail">
                   <span
                     className="t-alert-log-dot"
-                    style={{ background: STREAM_DOT_COLOR[alert.streamId] }}
+                    style={{ background: STREAM_COLORS[alert.streamId] }}
                   />
                   <span className="t-alert-log-line" />
                 </div>
