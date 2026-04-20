@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { STREAM_LABELS, STREAM_ORDER } from '../../domain/constants'
+import { STREAM_ORDER } from '../../domain/constants'
 import type { AlertEvent, AppSnapshot, InterestArea, StreamId } from '../../domain/types'
 import { readPreferences, readZones, writePreferences } from '../../lib/persistence'
 import { advanceWorkflow, createWorkflowState, type WorkflowState } from '../../lib/stateMachine'
@@ -8,8 +8,7 @@ import { MockRealtimeEngine } from '../../mocks/realtimeEngine'
 import { StatusBar } from './components/StatusBar'
 import { DetectionMap } from './components/DetectionMap'
 import { LidarViewport } from './components/LidarViewport'
-import { AlertStream } from './components/AlertStream'
-import { AlertLogPanel } from './components/AlertLogPanel'
+import { AlertFeed } from './components/AlertFeed'
 import { DockBar } from './components/DockBar'
 
 const engine = new MockRealtimeEngine()
@@ -27,8 +26,7 @@ export function OperatorPage() {
   const [workflowState, setWorkflowState] = useState<WorkflowState>(createWorkflowState())
   const [alerts, setAlerts] = useState<AlertEvent[]>([])
   const [swapped, setSwapped] = useState(false)
-  const [logPanelOpen, setLogPanelOpen] = useState(false)
-  const [selectedLogAlertId, setSelectedLogAlertId] = useState<string | null>(null)
+  const [selectedAlertId, setSelectedAlertId] = useState<string | null>(null)
   const normalizerStateRef = useRef(createNormalizerState())
   const queueRef = useRef<AlertEvent[]>([])
   const lastAudioMsRef = useRef(0)
@@ -102,33 +100,38 @@ export function OperatorPage() {
   const switchStream = (streamId: StreamId) => {
     setPreferences((prev) => ({ ...prev, selectedStreamId: streamId }))
     setWorkflowState((prev) => advanceWorkflow(prev, { type: 'CLEAR_FOCUS' }))
+    setSelectedAlertId(null)
   }
 
-  const onGoToStream = (streamId: StreamId) => {
+  const onSelectAlert = (alert: AlertEvent) => {
+    if (alert.alertId === selectedAlertId) {
+      setSelectedAlertId(null)
+      setWorkflowState((prev) => advanceWorkflow(prev, { type: 'CLEAR_FOCUS' }))
+      return
+    }
+    setSelectedAlertId(alert.alertId)
     let nextToken = 0
     setWorkflowState((prev) => {
-      const streamAlerts = alerts.filter((a) => a.streamId === streamId)
-      const target = streamAlerts[0]
-      if (!target) return advanceWorkflow(prev, { type: 'CLEAR_FOCUS' })
       const next = advanceWorkflow(prev, {
-        type: 'SELECT_ALERT', alertId: target.alertId,
-        trackId: target.trackId, streamId: target.streamId,
+        type: 'SELECT_ALERT',
+        alertId: alert.alertId,
+        trackId: alert.trackId,
+        streamId: alert.streamId,
       })
       nextToken = next.token
       return next
     })
-    setPreferences((prev) => ({ ...prev, selectedStreamId: streamId }))
+    setPreferences((prev) => ({ ...prev, selectedStreamId: alert.streamId }))
     window.setTimeout(() => {
       setWorkflowState((prev) =>
-        advanceWorkflow(prev, { type: 'STREAM_SWITCHED', token: nextToken, streamId }),
+        advanceWorkflow(prev, { type: 'STREAM_SWITCHED', token: nextToken, streamId: alert.streamId }),
       )
     }, 120)
   }
 
   const activeTracks = snapshot.tracksByStream[preferences.selectedStreamId]
-  const activeLabel = STREAM_LABELS[preferences.selectedStreamId].replace(' side', ' View')
-  const selectedLogAlert = selectedLogAlertId
-    ? visibleAlerts.find((a) => a.alertId === selectedLogAlertId) ?? null
+  const highlightedAlert = selectedAlertId
+    ? visibleAlerts.find((a) => a.alertId === selectedAlertId) ?? null
     : null
 
   const detectionMapEl = (
@@ -137,22 +140,30 @@ export function OperatorPage() {
       activeStreamId={preferences.selectedStreamId}
       onSwitchStream={switchStream}
       focusedTrackId={workflowState.focusTrackId}
-      highlightedAlert={selectedLogAlert}
+      highlightedAlert={highlightedAlert}
     />
   )
 
-  const lidarViewportEl = (
-    <div className="t-stream-viewport">
-      <LidarViewport
-        tracks={activeTracks}
-        focusedTrackId={workflowState.focusTrackId}
-        activeStreamId={preferences.selectedStreamId}
-      />
-      <div className="t-stream-header">
-        <span className="t-stream-title">{activeLabel}</span>
-      </div>
-    </div>
+  const lidarHeroEl = (
+    <LidarViewport
+      tracks={activeTracks}
+      focusedTrackId={workflowState.focusTrackId}
+      activeStreamId={preferences.selectedStreamId}
+      variant="hero"
+    />
   )
+
+  const lidarInsetEl = (
+    <LidarViewport
+      tracks={activeTracks}
+      focusedTrackId={workflowState.focusTrackId}
+      activeStreamId={preferences.selectedStreamId}
+      variant="inset"
+    />
+  )
+
+  const heroEl = swapped ? lidarHeroEl : detectionMapEl
+  const insetEl = swapped ? detectionMapEl : lidarInsetEl
 
   return (
     <div className={`t-shell${alertFlash ? ' t-shell--alert-flash' : ''}`}>
@@ -165,8 +176,9 @@ export function OperatorPage() {
       />
 
       <div className="t-main">
-        <div className="t-panel-left">
-          {swapped ? lidarViewportEl : detectionMapEl}
+        <div className="t-stage">
+          <div className="t-hero">{heroEl}</div>
+          <div className="t-inset">{insetEl}</div>
           <div
             className="t-view-toggle"
             onClick={() => setSwapped((s) => !s)}
@@ -178,36 +190,19 @@ export function OperatorPage() {
             <span className={`t-view-toggle-key${swapped ? ' t-view-toggle-key--active' : ''}`}>R</span>
           </div>
         </div>
-        <div className="t-panel-right">
-          <div className="t-panel-right-top">
-            {swapped ? detectionMapEl : lidarViewportEl}
-          </div>
-          <AlertStream
-            alerts={visibleAlerts}
-            tracksByStream={snapshot.tracksByStream}
-            activeStreamId={preferences.selectedStreamId}
-            alertFlash={alertFlash}
-            onGoToStream={onGoToStream}
-          />
-          <AlertLogPanel
-            alerts={visibleAlerts}
-            open={logPanelOpen}
-            now={snapshot.now}
-            onClose={() => { setLogPanelOpen(false); setSelectedLogAlertId(null) }}
-            onSelectAlert={(alert) => {
-              setSelectedLogAlertId(alert?.alertId ?? null)
-              if (alert) switchStream(alert.streamId)
-            }}
-            selectedAlertId={selectedLogAlertId}
-          />
-        </div>
+
+        <AlertFeed
+          alerts={visibleAlerts}
+          activeStreamId={preferences.selectedStreamId}
+          selectedAlertId={selectedAlertId}
+          onSelectAlert={onSelectAlert}
+        />
       </div>
 
       <DockBar
         activeStreamId={preferences.selectedStreamId}
         totalDetections={totalDetections}
         onSwitchStream={switchStream}
-        onToggleLog={() => setLogPanelOpen((o) => !o)}
       />
     </div>
   )

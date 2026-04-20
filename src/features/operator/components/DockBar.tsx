@@ -5,10 +5,9 @@ interface DockBarProps {
   activeStreamId: StreamId
   totalDetections: number
   onSwitchStream: (streamId: StreamId) => void
-  onToggleLog: () => void
 }
 
-export function DockBar({ activeStreamId, totalDetections, onSwitchStream, onToggleLog }: DockBarProps) {
+export function DockBar({ activeStreamId, totalDetections, onSwitchStream }: DockBarProps) {
   return (
     <div className="t-dock">
       <div className="t-dock-left">
@@ -36,9 +35,6 @@ export function DockBar({ activeStreamId, totalDetections, onSwitchStream, onTog
       </div>
 
       <div className="t-dock-right">
-        <button className="t-dock-logs-btn" type="button" onClick={onToggleLog}>
-          Logs
-        </button>
         <button className="t-dock-settings" type="button" aria-label="Settings">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="3" />

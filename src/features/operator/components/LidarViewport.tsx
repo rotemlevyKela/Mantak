@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
+import { STREAM_LABELS } from '../../../domain/constants'
 import type { StreamId, TrackedObject } from '../../../domain/types'
 
 interface LidarViewportProps {
   tracks: TrackedObject[]
   focusedTrackId?: string
   activeStreamId: StreamId
+  variant?: 'hero' | 'inset'
 }
 
 const VIEWS: Record<StreamId, { yaw: number; pitch: number }> = {
@@ -41,7 +43,7 @@ interface SceneState {
   markerGroup: THREE.Group
 }
 
-export function LidarViewport({ tracks, focusedTrackId, activeStreamId }: LidarViewportProps) {
+export function LidarViewport({ tracks, focusedTrackId, activeStreamId, variant = 'hero' }: LidarViewportProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const stateRef = useRef<SceneState | null>(null)
@@ -79,13 +81,18 @@ export function LidarViewport({ tracks, focusedTrackId, activeStreamId }: LidarV
     return () => clearTimeout(timer)
   }, [activeStreamId])
 
+  const insetLabel = STREAM_LABELS[activeStreamId].replace(/ Side$/i, ' View')
+
   return (
-    <div className="t-viewport" ref={containerRef}>
+    <div className={`t-viewport t-viewport--${variant}`} ref={containerRef}>
       <canvas
         className={`t-viewport-canvas${switching ? ' t-viewport-canvas--switching' : ''}`}
         ref={canvasRef}
       />
       <div className="t-viewport-scanline" />
+      {variant === 'inset' && (
+        <div className="t-viewport-inset-caption">{insetLabel}</div>
+      )}
     </div>
   )
 }
