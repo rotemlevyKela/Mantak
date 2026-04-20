@@ -1,6 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
-import { STREAM_LABELS } from '../../../domain/constants'
-import type { AlertEvent, ObjectType, StreamId } from '../../../domain/types'
+import {
+  RESOLUTION_LABELS,
+  STREAM_LABELS,
+  THREAT_ACCENT,
+  THREAT_SHORT_LABEL,
+} from '../../../domain/constants'
+import type {
+  AlertEvent,
+  AlertResolution,
+  ObjectType,
+  StreamId,
+  ThreatKind,
+} from '../../../domain/types'
+import { formatClock } from '../../../lib/time'
 import lidarSensorImg from '../../../assets/lidar-sensor.png'
 
 const STREAM_CONE_ROTATION: Record<StreamId, number> = {
@@ -14,6 +26,16 @@ const OBJECT_LABEL: Record<ObjectType, string> = {
   man: 'Person',
   drone: 'Drone',
   vehicle: 'Vehicle',
+}
+
+const RESOLUTIONS: AlertResolution[] = ['handled', 'false-alarm', 'disappeared']
+
+function threatKindsOf(alert: AlertEvent): ThreatKind[] {
+  const kinds: ThreatKind[] = []
+  if (alert.flags?.fastApproaching) kinds.push('fast-approaching')
+  if (alert.flags?.loitering) kinds.push('loitering')
+  if (alert.flags?.drone) kinds.push('drone')
+  return kinds
 }
 
 function DirectionIcon({ streamId }: { streamId: StreamId }) {
@@ -62,26 +84,39 @@ function DirectionIcon({ streamId }: { streamId: StreamId }) {
 }
 
 interface AlertFeedProps {
-  alerts: AlertEvent[]
+  activeAlerts: AlertEvent[]
+  archivedAlerts: AlertEvent[]
   activeStreamId: StreamId
   selectedAlertId: string | null
+  activeTab: 'active' | 'archive'
+  onChangeTab: (tab: 'active' | 'archive') => void
   onSelectAlert: (alert: AlertEvent) => void
+  onArchive: (alert: AlertEvent, resolution: AlertResolution) => void
+  onDeleteArchived: (alert: AlertEvent) => void
+  onClearArchive: () => void
 }
 
 const NEW_ALERT_DURATION_MS = 3000
 
 export function AlertFeed({
-  alerts,
+  activeAlerts,
+  archivedAlerts,
   activeStreamId,
   selectedAlertId,
+  activeTab,
+  onChangeTab,
   onSelectAlert,
+  onArchive,
+  onDeleteArchived,
+  onClearArchive,
 }: AlertFeedProps) {
   const seenIdsRef = useRef<Set<string>>(new Set())
   const [flashingIds, setFlashingIds] = useState<Set<string>>(new Set())
+  const [outcomeForId, setOutcomeForId] = useState<string | null>(null)
 
   useEffect(() => {
     const newIds: string[] = []
-    for (const alert of alerts) {
+    for (const alert of activeAlerts) {
       if (!seenIdsRef.current.has(alert.alertId)) {
         seenIdsRef.current.add(alert.alertId)
         newIds.push(alert.alertId)
@@ -104,65 +139,175 @@ export function AlertFeed({
     }, NEW_ALERT_DURATION_MS)
 
     return () => window.clearTimeout(timer)
-  }, [alerts])
+  }, [activeAlerts])
 
-  if (alerts.length === 0) {
-    return (
-      <div className="t-alert-feed">
-        <div className="t-alert-feed-empty">No LiDAR Detections</div>
-      </div>
-    )
-  }
+  const list = activeTab === 'active' ? activeAlerts : archivedAlerts
 
   return (
     <div className="t-alert-feed">
-      <div className="t-alert-feed-list">
-        {alerts.map((alert, idx) => {
-          const isSelected = alert.alertId === selectedAlertId
-          const isActiveStream = alert.streamId === activeStreamId
-          const isFlashing = flashingIds.has(alert.alertId)
-          const label = STREAM_LABELS[alert.streamId].replace(/ Side$/i, '')
-          const tag = alert.streamId.toUpperCase()
-          const objectLabel = OBJECT_LABEL[alert.objectType] ?? alert.objectType
-          const distance = Math.max(0, Math.round(alert.distance.distanceM))
-
-          const classes = [
-            't-alert-feed-card',
-            isSelected ? 't-alert-feed-card--selected' : '',
-            isActiveStream ? 't-alert-feed-card--active-stream' : '',
-            isFlashing ? 't-alert-feed-card--new' : '',
-          ]
-            .filter(Boolean)
-            .join(' ')
-
-          return (
-            <div
-              key={alert.alertId}
-              className={classes}
-              style={{ animationDelay: `${Math.min(idx, 6) * 0.05}s` }}
-              onClick={() => onSelectAlert(alert)}
-            >
-              <div className="t-alert-feed-card-accent" />
-
-              <div className="t-alert-feed-card-direction">
-                <DirectionIcon streamId={alert.streamId} />
-              </div>
-
-              <div className="t-alert-feed-card-body">
-                <div className="t-alert-feed-card-label">
-                  <span className="t-alert-feed-card-stream">{label}</span>
-                  <span className="t-alert-feed-card-tag">{tag}</span>
-                </div>
-                <div className="t-alert-feed-card-object">{objectLabel}</div>
-              </div>
-
-              <div className="t-alert-feed-card-distance">
-                <span>{distance}m</span>
-              </div>
-            </div>
-          )
-        })}
+      <div className="t-alert-feed-tabs" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'active'}
+          className={`t-alert-feed-tab${activeTab === 'active' ? ' t-alert-feed-tab--active' : ''}`}
+          onClick={() => onChangeTab('active')}
+        >
+          Active
+          <span className="t-alert-feed-tab-count">{activeAlerts.length}</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'archive'}
+          className={`t-alert-feed-tab${activeTab === 'archive' ? ' t-alert-feed-tab--active' : ''}`}
+          onClick={() => onChangeTab('archive')}
+        >
+          Archive
+          <span className="t-alert-feed-tab-count">{archivedAlerts.length}</span>
+        </button>
       </div>
+
+      {activeTab === 'archive' && archivedAlerts.length > 0 && (
+        <div className="t-alert-feed-toolbar">
+          <button
+            type="button"
+            className="t-alert-feed-clear"
+            onClick={onClearArchive}
+          >
+            Clear archive
+          </button>
+        </div>
+      )}
+
+      {list.length === 0 ? (
+        <div className="t-alert-feed-empty">
+          {activeTab === 'active' ? 'No LiDAR Detections' : 'No archived alerts'}
+        </div>
+      ) : (
+        <div className="t-alert-feed-list">
+          {list.map((alert, idx) => {
+            const isSelected = alert.alertId === selectedAlertId
+            const isActiveStream = alert.streamId === activeStreamId
+            const isFlashing = activeTab === 'active' && flashingIds.has(alert.alertId)
+            const isArchived = activeTab === 'archive'
+            const kinds = threatKindsOf(alert)
+            const abnormal = kinds.length > 0
+            const label = STREAM_LABELS[alert.streamId].replace(/ Side$/i, ' Side')
+            const objectLabel = OBJECT_LABEL[alert.objectType] ?? alert.objectType
+            const distance = Math.max(0, Math.round(alert.distance.distanceM))
+            const outcomeOpen = outcomeForId === alert.alertId
+
+            const classes = [
+              't-alert-feed-card',
+              isSelected ? 't-alert-feed-card--selected' : '',
+              isActiveStream && !isArchived ? 't-alert-feed-card--active-stream' : '',
+              isFlashing ? 't-alert-feed-card--new' : '',
+              abnormal ? 't-alert-feed-card--abnormal' : '',
+              isArchived ? 't-alert-feed-card--archived' : '',
+            ].filter(Boolean).join(' ')
+
+            return (
+              <div
+                key={alert.alertId}
+                className={classes}
+                style={{ animationDelay: `${Math.min(idx, 6) * 0.05}s` }}
+                onClick={() => onSelectAlert(alert)}
+              >
+                <div className="t-alert-feed-card-row">
+                  <div className="t-alert-feed-card-accent" />
+
+                  <div className="t-alert-feed-card-direction">
+                    <DirectionIcon streamId={alert.streamId} />
+                  </div>
+
+                  <div className="t-alert-feed-card-body">
+                    <div className="t-alert-feed-card-label">
+                      <span className="t-alert-feed-card-stream">{label}</span>
+                    </div>
+                    <div className="t-alert-feed-card-object">{objectLabel}</div>
+                    {kinds.length > 0 && (
+                      <div className="t-alert-feed-card-flags">
+                        {kinds.map((k) => (
+                          <span
+                            key={k}
+                            className={`t-alert-feed-card-flag t-alert-feed-card-flag--${k}`}
+                            style={{ background: THREAT_ACCENT[k] }}
+                          >
+                            {THREAT_SHORT_LABEL[k]}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {isArchived && alert.resolution && (
+                      <div className="t-alert-feed-card-resolution">
+                        {RESOLUTION_LABELS[alert.resolution]}
+                        {alert.resolvedAt ? (
+                          <span className="t-alert-feed-card-resolved-at">
+                            {formatClock(alert.resolvedAt)}
+                          </span>
+                        ) : null}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="t-alert-feed-card-distance">
+                    <span>{distance}m</span>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="t-alert-feed-card-close"
+                    aria-label={isArchived ? 'Delete archived alert' : 'Close alert'}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (isArchived) {
+                        onDeleteArchived(alert)
+                      } else {
+                        setOutcomeForId(outcomeOpen ? null : alert.alertId)
+                      }
+                    }}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                      <path d="M18 6L6 18M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+
+                {outcomeOpen && !isArchived && (
+                  <div
+                    className="t-alert-outcome t-alert-outcome--sheet"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <span className="t-alert-outcome-label">Resolution</span>
+                    {RESOLUTIONS.map((r) => (
+                      <button
+                        key={r}
+                        type="button"
+                        className={`t-alert-outcome-btn t-alert-outcome-btn--${r}`}
+                        onClick={() => {
+                          onArchive(alert, r)
+                          setOutcomeForId(null)
+                        }}
+                      >
+                        {RESOLUTION_LABELS[r]}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      className="t-alert-outcome-cancel"
+                      aria-label="Cancel close"
+                      onClick={() => setOutcomeForId(null)}
+                    >
+                      &times;
+                    </button>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { STREAM_ORDER } from '../../domain/constants'
-import type { AlertEvent, AppSnapshot, InterestArea, StreamId } from '../../domain/types'
-import { readPreferences, readZones, writePreferences } from '../../lib/persistence'
+import type {
+  AlertEvent, AlertResolution, AppSnapshot, InterestArea,
+  StreamId, ThreatFlags, ThreatKind,
+} from '../../domain/types'
+import {
+  readArchive, readPreferences, readZones,
+  writeArchive, writePreferences, writeZones,
+} from '../../lib/persistence'
 import { advanceWorkflow, createWorkflowState, type WorkflowState } from '../../lib/stateMachine'
 import { createNormalizerState, normalizeAlerts } from '../../lib/normalizer'
 import { MockRealtimeEngine } from '../../mocks/realtimeEngine'
@@ -9,7 +15,9 @@ import { StatusBar } from './components/StatusBar'
 import { DetectionMap } from './components/DetectionMap'
 import { LidarViewport } from './components/LidarViewport'
 import { AlertFeed } from './components/AlertFeed'
+import { AlertSnapshotCard } from './components/AlertSnapshotCard'
 import { DockBar } from './components/DockBar'
+import { ZonesOverlay } from './components/ZonesOverlay'
 
 const engine = new MockRealtimeEngine()
 
@@ -25,8 +33,11 @@ export function OperatorPage() {
   const [dismissedStreams, _setDismissedStreams] = useState<StreamId[]>([])
   const [workflowState, setWorkflowState] = useState<WorkflowState>(createWorkflowState())
   const [alerts, setAlerts] = useState<AlertEvent[]>([])
+  const [archivedAlerts, setArchivedAlerts] = useState<AlertEvent[]>(() => readArchive())
+  const [activeTab, setActiveTab] = useState<'active' | 'archive'>('active')
   const [swapped, setSwapped] = useState(false)
   const [selectedAlertId, setSelectedAlertId] = useState<string | null>(null)
+  const [zonesEditorOpen, setZonesEditorOpen] = useState(false)
   const normalizerStateRef = useRef(createNormalizerState())
   const queueRef = useRef<AlertEvent[]>([])
   const lastAudioMsRef = useRef(0)
@@ -41,11 +52,6 @@ export function OperatorPage() {
   }, [zones])
 
   useEffect(() => {
-    const interval = window.setInterval(() => setZones(readZones()), 2000)
-    return () => window.clearInterval(interval)
-  }, [])
-
-  useEffect(() => {
     const interval = window.setInterval(() => {
       const normalized = normalizeAlerts(queueRef.current, normalizerStateRef.current, { now: Date.now() })
       if (!normalized.length) return
@@ -56,6 +62,8 @@ export function OperatorPage() {
   }, [])
 
   useEffect(() => { writePreferences(preferences) }, [preferences])
+  useEffect(() => { writeArchive(archivedAlerts) }, [archivedAlerts])
+  useEffect(() => { writeZones(zones); engine.setZones(zones) }, [zones])
 
   const [alertFlash, setAlertFlash] = useState(false)
 
@@ -87,10 +95,25 @@ export function OperatorPage() {
     lastAudioMsRef.current = newest.detectedAt
   }, [alerts, preferences.soundEnabled])
 
-  const visibleAlerts = useMemo(
-    () => alerts.filter((a) => !dismissedStreams.includes(a.streamId)),
-    [alerts, dismissedStreams],
+  const archivedIdSet = useMemo(
+    () => new Set(archivedAlerts.map((a) => a.alertId)),
+    [archivedAlerts],
   )
+
+  const visibleAlerts = useMemo(
+    () => alerts.filter(
+      (a) => !dismissedStreams.includes(a.streamId) && !archivedIdSet.has(a.alertId),
+    ),
+    [alerts, dismissedStreams, archivedIdSet],
+  )
+
+  const flaggedTrackFlags = useMemo(() => {
+    const map: Record<string, ThreatFlags> = {}
+    for (const a of visibleAlerts) {
+      if (a.flags) map[a.trackId] = a.flags
+    }
+    return map
+  }, [visibleAlerts])
 
   const totalDetections = useMemo(
     () => STREAM_ORDER.reduce((sum, id) => sum + snapshot.tracksByStream[id].length, 0),
@@ -103,13 +126,7 @@ export function OperatorPage() {
     setSelectedAlertId(null)
   }
 
-  const onSelectAlert = (alert: AlertEvent) => {
-    if (alert.alertId === selectedAlertId) {
-      setSelectedAlertId(null)
-      setWorkflowState((prev) => advanceWorkflow(prev, { type: 'CLEAR_FOCUS' }))
-      return
-    }
-    setSelectedAlertId(alert.alertId)
+  const focusAlert = (alert: AlertEvent) => {
     let nextToken = 0
     setWorkflowState((prev) => {
       const next = advanceWorkflow(prev, {
@@ -129,8 +146,53 @@ export function OperatorPage() {
     }, 120)
   }
 
+  const onSelectAlert = (alert: AlertEvent) => {
+    if (alert.alertId === selectedAlertId) {
+      setSelectedAlertId(null)
+      setWorkflowState((prev) => advanceWorkflow(prev, { type: 'CLEAR_FOCUS' }))
+      return
+    }
+    setSelectedAlertId(alert.alertId)
+    focusAlert(alert)
+  }
+
+  const onArchive = (alert: AlertEvent, resolution: AlertResolution) => {
+    const archived: AlertEvent = {
+      ...alert,
+      status: 'archived',
+      resolution,
+      resolvedAt: Date.now(),
+    }
+    setAlerts((current) => current.filter((a) => a.alertId !== alert.alertId))
+    setArchivedAlerts((current) => [archived, ...current].slice(0, 200))
+    if (selectedAlertId === alert.alertId) {
+      setSelectedAlertId(null)
+      setWorkflowState((prev) => advanceWorkflow(prev, { type: 'CLEAR_FOCUS' }))
+    }
+  }
+
+  const onDeleteArchived = (alert: AlertEvent) => {
+    setArchivedAlerts((current) => current.filter((a) => a.alertId !== alert.alertId))
+  }
+
+  const onClearArchive = () => {
+    setArchivedAlerts([])
+  }
+
+  const onFireThreat = (kind: ThreatKind) => engine.fireThreat(kind)
+
+  const onResetDemo = () => {
+    engine.resetDemo()
+    setAlerts([])
+    setArchivedAlerts([])
+    setSelectedAlertId(null)
+    normalizerStateRef.current = createNormalizerState()
+    queueRef.current = []
+    setWorkflowState((prev) => advanceWorkflow(prev, { type: 'CLEAR_FOCUS' }))
+  }
+
   const activeTracks = snapshot.tracksByStream[preferences.selectedStreamId]
-  const highlightedAlert = selectedAlertId
+  const selectedAlert = selectedAlertId
     ? visibleAlerts.find((a) => a.alertId === selectedAlertId) ?? null
     : null
 
@@ -140,7 +202,8 @@ export function OperatorPage() {
       activeStreamId={preferences.selectedStreamId}
       onSwitchStream={switchStream}
       focusedTrackId={workflowState.focusTrackId}
-      highlightedAlert={highlightedAlert}
+      highlightedAlert={selectedAlert}
+      flaggedTrackFlags={flaggedTrackFlags}
     />
   )
 
@@ -164,6 +227,7 @@ export function OperatorPage() {
 
   const heroEl = swapped ? lidarHeroEl : detectionMapEl
   const insetEl = swapped ? detectionMapEl : lidarInsetEl
+  const zonesEditorVisible = zonesEditorOpen && !swapped
 
   return (
     <div className={`t-shell${alertFlash ? ' t-shell--alert-flash' : ''}`}>
@@ -178,6 +242,13 @@ export function OperatorPage() {
       <div className="t-main">
         <div className="t-stage">
           <div className="t-hero">{heroEl}</div>
+          {zonesEditorVisible && (
+            <ZonesOverlay
+              zones={zones}
+              onChange={setZones}
+              onClose={() => setZonesEditorOpen(false)}
+            />
+          )}
           <div className="t-inset">{insetEl}</div>
           <div
             className="t-view-toggle"
@@ -189,13 +260,31 @@ export function OperatorPage() {
             <span className={`t-view-toggle-key${!swapped ? ' t-view-toggle-key--active' : ''}`}>P</span>
             <span className={`t-view-toggle-key${swapped ? ' t-view-toggle-key--active' : ''}`}>R</span>
           </div>
+          {selectedAlert && activeTab === 'active' && (
+            <AlertSnapshotCard
+              alert={selectedAlert}
+              now={snapshot.now}
+              onFocusMap={focusAlert}
+              onArchive={onArchive}
+              onClose={() => {
+                setSelectedAlertId(null)
+                setWorkflowState((prev) => advanceWorkflow(prev, { type: 'CLEAR_FOCUS' }))
+              }}
+            />
+          )}
         </div>
 
         <AlertFeed
-          alerts={visibleAlerts}
+          activeAlerts={visibleAlerts}
+          archivedAlerts={archivedAlerts}
           activeStreamId={preferences.selectedStreamId}
           selectedAlertId={selectedAlertId}
+          activeTab={activeTab}
+          onChangeTab={setActiveTab}
           onSelectAlert={onSelectAlert}
+          onArchive={onArchive}
+          onDeleteArchived={onDeleteArchived}
+          onClearArchive={onClearArchive}
         />
       </div>
 
@@ -203,6 +292,10 @@ export function OperatorPage() {
         activeStreamId={preferences.selectedStreamId}
         totalDetections={totalDetections}
         onSwitchStream={switchStream}
+        onFireThreat={onFireThreat}
+        onResetDemo={onResetDemo}
+        onToggleZones={() => setZonesEditorOpen((o) => !o)}
+        zonesActive={zonesEditorOpen}
       />
     </div>
   )

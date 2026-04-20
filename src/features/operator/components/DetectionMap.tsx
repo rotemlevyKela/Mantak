@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
-import { STREAM_ORDER } from '../../../domain/constants'
-import type { AlertEvent, StreamId, TrackedObject } from '../../../domain/types'
+import { STREAM_ORDER, THREAT_ACCENT } from '../../../domain/constants'
+import type { AlertEvent, StreamId, ThreatFlags, ThreatKind, TrackedObject } from '../../../domain/types'
 import lidarSensorImg from '../../../assets/lidar-sensor.png'
 
 interface DetectionMapProps {
@@ -9,6 +9,7 @@ interface DetectionMapProps {
   onSwitchStream: (streamId: StreamId) => void
   focusedTrackId?: string
   highlightedAlert?: AlertEvent | null
+  flaggedTrackFlags?: Record<string, ThreatFlags>
 }
 
 const CX = 300
@@ -44,12 +45,41 @@ function horizDist(t: TrackedObject): number {
   return Math.sqrt(t.position.x ** 2 + t.position.z ** 2)
 }
 
+function primaryKind(flags?: ThreatFlags): ThreatKind | null {
+  if (!flags) return null
+  if (flags.fastApproaching) return 'fast-approaching'
+  if (flags.drone) return 'drone'
+  if (flags.loitering) return 'loitering'
+  return null
+}
+
+function smoothPath(points: Array<{ x: number; y: number }>): string {
+  if (points.length < 2) return ''
+  if (points.length === 2) {
+    return `M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)} L ${points[1].x.toFixed(1)} ${points[1].y.toFixed(1)}`
+  }
+  let d = `M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[i - 1] ?? points[i]
+    const p1 = points[i]
+    const p2 = points[i + 1]
+    const p3 = points[i + 2] ?? p2
+    const c1x = p1.x + (p2.x - p0.x) / 6
+    const c1y = p1.y + (p2.y - p0.y) / 6
+    const c2x = p2.x - (p3.x - p1.x) / 6
+    const c2y = p2.y - (p3.y - p1.y) / 6
+    d += ` C ${c1x.toFixed(1)} ${c1y.toFixed(1)}, ${c2x.toFixed(1)} ${c2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`
+  }
+  return d
+}
+
 export function DetectionMap({
   tracksByStream,
   activeStreamId,
   onSwitchStream,
   focusedTrackId,
   highlightedAlert,
+  flaggedTrackFlags,
 }: DetectionMapProps) {
   const allTracks = useMemo(
     () => STREAM_ORDER.flatMap((id) => tracksByStream[id]),
@@ -93,7 +123,6 @@ export function DetectionMap({
 
         <rect x="0" y="0" width="600" height="600" fill="url(#dm-bg)" />
 
-        {/* range ring - 25m */}
         <circle cx={CX} cy={CY} r={OUTER_R * 0.45} fill="none"
           stroke="rgba(255,255,255,0.04)" strokeWidth="0.5" strokeDasharray="3 4" />
 
@@ -130,6 +159,44 @@ export function DetectionMap({
             onClick={() => onSwitchStream(id)} />
         ))}
 
+        {allTracks.map((track) => {
+          if (!track.trail || track.trail.length < 2) return null
+          const flags = track.flags ?? flaggedTrackFlags?.[track.trackId]
+          const kind = primaryKind(flags)
+          const color = kind ? THREAT_ACCENT[kind] : '#ef4444'
+          const points = track.trail.map((p) => ({
+            x: CX + p.x * scale,
+            y: CY + p.z * scale,
+          }))
+          const gradId = `trail-grad-${track.trackId}`
+          const tail = points[0]
+          const head = points[points.length - 1]
+          return (
+            <g key={`${track.trackId}-trail`}>
+              <defs>
+                <linearGradient
+                  id={gradId}
+                  gradientUnits="userSpaceOnUse"
+                  x1={tail.x} y1={tail.y}
+                  x2={head.x} y2={head.y}
+                >
+                  <stop offset="0%" stopColor={color} stopOpacity="0.05" />
+                  <stop offset="60%" stopColor={color} stopOpacity="0.45" />
+                  <stop offset="100%" stopColor={color} stopOpacity="0.9" />
+                </linearGradient>
+              </defs>
+              <path
+                d={smoothPath(points)}
+                fill="none"
+                stroke={`url(#${gradId})`}
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </g>
+          )
+        })}
+
         <image
           href={lidarSensorImg}
           x={CX - VEH_W / 2} y={CY - VEH_H / 2}
@@ -145,11 +212,22 @@ export function DetectionMap({
           const focused = track.trackId === focusedTrackId
           const isHighlighted = highlightedAlert?.trackId === track.trackId
           const showLabel = labelledIds.has(track.trackId)
+          const flags = track.flags ?? flaggedTrackFlags?.[track.trackId]
+          const kind = primaryKind(flags)
+          const abnormalColor = kind ? THREAT_ACCENT[kind] : null
+          const dotFill = abnormalColor ?? '#ef4444'
 
           return (
             <g key={track.trackId}>
               <circle cx={dx} cy={dy} r="14"
-                fill="rgba(239,68,68,0.12)" filter="url(#dm-blur)" />
+                fill={`${dotFill}1f`} filter="url(#dm-blur)" />
+              {abnormalColor && (
+                <circle cx={dx} cy={dy} r="16"
+                  fill="none" stroke={abnormalColor} strokeWidth="2" opacity="0.85">
+                  <animate attributeName="r" values="12;22;12" dur="1.8s" repeatCount="indefinite" />
+                  <animate attributeName="opacity" values="0.9;0.15;0.9" dur="1.8s" repeatCount="indefinite" />
+                </circle>
+              )}
               {(focused || isHighlighted) && (
                 <circle cx={dx} cy={dy} r="12"
                   fill="none" stroke={isHighlighted ? '#fff' : '#ef4444'} strokeWidth={isHighlighted ? 2 : 1.5} opacity={isHighlighted ? 0.9 : 0.5}>
@@ -172,7 +250,7 @@ export function DetectionMap({
               )}
               {!isHighlighted && (
                 <circle cx={dx} cy={dy} r={focused ? 6 : 4.5}
-                  fill="#ef4444" opacity={focused ? 1 : 0.85} />
+                  fill={dotFill} opacity={focused ? 1 : 0.85} />
               )}
               {showLabel && (
                 <text x={dx} y={dy - (isHighlighted ? 24 : 14)} textAnchor="middle"

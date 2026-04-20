@@ -1,7 +1,9 @@
-import type { InterestArea, Preferences, StreamId } from '../domain/types'
+import type { AlertEvent, InterestArea, Preferences, StreamId } from '../domain/types'
 
 const PREFS_KEY = 'mantak:prefs:v1'
 const ZONES_KEY = 'mantak:zones:v1'
+const ARCHIVE_KEY = 'mantak:archive:v1'
+const ARCHIVE_LIMIT = 200
 
 export const defaultPreferences: Preferences = {
   selectedStreamId: 'front',
@@ -50,6 +52,29 @@ export function readZones(): InterestArea[] {
 
 export function writeZones(zones: InterestArea[]) {
   localStorage.setItem(ZONES_KEY, JSON.stringify(zones))
+}
+
+export function readArchive(): AlertEvent[] {
+  try {
+    const raw = localStorage.getItem(ARCHIVE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as AlertEvent[]
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .filter((a) => a && typeof a.alertId === 'string')
+      .slice(0, ARCHIVE_LIMIT)
+  } catch {
+    return []
+  }
+}
+
+export function writeArchive(alerts: AlertEvent[]) {
+  try {
+    localStorage.setItem(
+      ARCHIVE_KEY,
+      JSON.stringify(alerts.slice(0, ARCHIVE_LIMIT)),
+    )
+  } catch { /* quota exceeded — silently drop */ }
 }
 
 function parseStream(input: unknown): StreamId {

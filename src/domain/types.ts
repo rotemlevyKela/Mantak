@@ -10,6 +10,24 @@ export type ZoneMode = 'opt-in' | 'opt-out'
 
 export type SortMode = 'priority' | 'time'
 
+export type ThreatKind = 'fast-approaching' | 'loitering' | 'drone'
+
+export type AlertResolution = 'handled' | 'false-alarm' | 'disappeared'
+
+export interface ThreatFlags {
+  fastApproaching?: boolean
+  loitering?: boolean
+  drone?: boolean
+}
+
+export type AlertStatus = 'active' | 'archived'
+
+export interface TrailPoint {
+  x: number
+  z: number
+  t: number
+}
+
 export interface Dimensions {
   heightM: number
   lengthM: number
@@ -31,6 +49,8 @@ export interface TrackedObject {
   dimensions: Dimensions
   position: { x: number; y: number; z: number }
   distance: DistanceVector
+  trail?: TrailPoint[]
+  flags?: ThreatFlags
 }
 
 export interface AlertEvent {
@@ -46,6 +66,10 @@ export interface AlertEvent {
   distance: DistanceVector
   dimensions: Dimensions
   snapshotUrl?: string
+  flags?: ThreatFlags
+  status?: AlertStatus
+  resolution?: AlertResolution
+  resolvedAt?: number
 }
 
 export interface LidarStream {
@@ -67,6 +91,7 @@ export interface Preferences {
   soundEnabled: boolean
   colorScale: 'yellow-red' | 'black-white'
   showVelocity: boolean
+  archiveVisible?: boolean
 }
 
 export interface AppSnapshot {

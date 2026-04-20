@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { STREAM_LABELS } from '../../../domain/constants'
 import type { StreamId, TrackedObject } from '../../../domain/types'
+import { LidarNavWidget } from './LidarNavWidget'
 
 interface LidarViewportProps {
   tracks: TrackedObject[]
@@ -23,9 +24,13 @@ const CFG = {
   CAM_FOV: 75,
   DEPTH: 80,
   ANIM_MS: 1200,
+  LOOK_DIST: 10,
+  ZOOM_MIN: 4,
+  ZOOM_MAX: 18,
 }
 
 interface MarkerMesh { ring: THREE.Mesh; trackId: string }
+interface TrailLine { line: THREE.Line; trackId: string }
 
 interface SceneState {
   scene: THREE.Scene
@@ -35,19 +40,60 @@ interface SceneState {
   pitch: number
   tYaw: number
   tPitch: number
+  lookOffset: THREE.Vector3
+  zoom: number
+  tZoom: number
   animating: boolean
   animId: number
   disposed: boolean
   container: HTMLElement
   markers: MarkerMesh[]
+  trails: TrailLine[]
   markerGroup: THREE.Group
+  trailGroup: THREE.Group
 }
 
 export function LidarViewport({ tracks, focusedTrackId, activeStreamId, variant = 'hero' }: LidarViewportProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const stateRef = useRef<SceneState | null>(null)
+  const manuallyAdjustedRef = useRef(false)
   const [switching, setSwitching] = useState(false)
+  const [manuallyAdjusted, setManuallyAdjusted] = useState(false)
+  const [controlsOpen, setControlsOpen] = useState(false)
+
+  const nudgeYaw = useCallback((delta: number) => {
+    const state = stateRef.current
+    if (!state) return
+    state.tYaw += delta
+    manuallyAdjustedRef.current = true
+    setManuallyAdjusted(true)
+  }, [])
+  const nudgePitch = useCallback((delta: number) => {
+    const state = stateRef.current
+    if (!state) return
+    state.tPitch = Math.max(-0.9, Math.min(0.9, state.tPitch + delta))
+    manuallyAdjustedRef.current = true
+    setManuallyAdjusted(true)
+  }, [])
+  const nudgeZoom = useCallback((factor: number) => {
+    const state = stateRef.current
+    if (!state) return
+    state.tZoom = Math.max(CFG.ZOOM_MIN, Math.min(CFG.ZOOM_MAX, state.tZoom * factor))
+    manuallyAdjustedRef.current = true
+    setManuallyAdjusted(true)
+  }, [])
+  const resetView = useCallback(() => {
+    const state = stateRef.current
+    if (!state) return
+    const view = VIEWS[activeStreamId]
+    state.tYaw = view.yaw
+    state.tPitch = view.pitch
+    state.tZoom = CFG.LOOK_DIST
+    state.lookOffset.set(0, 0, 0)
+    manuallyAdjustedRef.current = false
+    setManuallyAdjusted(false)
+  }, [activeStreamId])
 
   useEffect(() => {
     const container = containerRef.current
@@ -66,11 +112,13 @@ export function LidarViewport({ tracks, focusedTrackId, activeStreamId, variant 
     const state = stateRef.current
     if (!state) return
     updateMarkers(state, tracks, focusedTrackId)
+    updateTrails(state, tracks)
   }, [tracks, focusedTrackId])
 
   useEffect(() => {
     const state = stateRef.current
     if (!state) return
+    if (manuallyAdjustedRef.current) return
     const view = VIEWS[activeStreamId]
     let d = view.yaw - state.tYaw
     while (d > Math.PI) d -= Math.PI * 2
@@ -80,6 +128,72 @@ export function LidarViewport({ tracks, focusedTrackId, activeStreamId, variant 
     const timer = setTimeout(() => setSwitching(false), 200)
     return () => clearTimeout(timer)
   }, [activeStreamId])
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas || variant !== 'hero') return
+
+    let dragging = false
+    let panning = false
+    let lastX = 0
+    let lastY = 0
+
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.button !== 0) return
+      dragging = true
+      panning = e.shiftKey
+      lastX = e.clientX
+      lastY = e.clientY
+      canvas.setPointerCapture(e.pointerId)
+      canvas.style.cursor = panning ? 'grabbing' : 'move'
+    }
+    const onPointerMove = (e: PointerEvent) => {
+      if (!dragging) return
+      const state = stateRef.current
+      if (!state) return
+      const dx = e.clientX - lastX
+      const dy = e.clientY - lastY
+      lastX = e.clientX
+      lastY = e.clientY
+      if (panning) {
+        const right = new THREE.Vector3(Math.cos(state.tYaw), 0, Math.sin(state.tYaw))
+        const up = new THREE.Vector3(0, 1, 0)
+        state.lookOffset.addScaledVector(right, -dx * 0.04)
+        state.lookOffset.addScaledVector(up, dy * 0.04)
+      } else {
+        state.tYaw -= dx * 0.005
+        state.tPitch = Math.max(-0.9, Math.min(0.9, state.tPitch - dy * 0.004))
+      }
+      manuallyAdjustedRef.current = true
+      setManuallyAdjusted(true)
+    }
+    const onPointerUp = (e: PointerEvent) => {
+      dragging = false
+      panning = false
+      canvas.style.cursor = ''
+      try { canvas.releasePointerCapture(e.pointerId) } catch { /* already released */ }
+    }
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const state = stateRef.current
+      if (!state) return
+      const factor = e.deltaY > 0 ? 1.1 : 1 / 1.1
+      state.tZoom = Math.max(CFG.ZOOM_MIN, Math.min(CFG.ZOOM_MAX, state.tZoom * factor))
+      manuallyAdjustedRef.current = true
+      setManuallyAdjusted(true)
+    }
+
+    canvas.addEventListener('pointerdown', onPointerDown)
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('pointerup', onPointerUp)
+    canvas.addEventListener('wheel', onWheel, { passive: false })
+    return () => {
+      canvas.removeEventListener('pointerdown', onPointerDown)
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerUp)
+      canvas.removeEventListener('wheel', onWheel)
+    }
+  }, [variant])
 
   const insetLabel = STREAM_LABELS[activeStreamId].replace(/ Side$/i, ' View')
 
@@ -92,6 +206,21 @@ export function LidarViewport({ tracks, focusedTrackId, activeStreamId, variant 
       <div className="t-viewport-scanline" />
       {variant === 'inset' && (
         <div className="t-viewport-inset-caption">{insetLabel}</div>
+      )}
+      {variant === 'hero' && (
+        <LidarNavWidget
+          open={controlsOpen}
+          onToggle={() => setControlsOpen((o) => !o)}
+          onYaw={nudgeYaw}
+          onPitch={nudgePitch}
+          onZoom={nudgeZoom}
+          onReset={resetView}
+        />
+      )}
+      {variant === 'hero' && manuallyAdjusted && !controlsOpen && (
+        <button type="button" className="t-viewport-reset" onClick={resetView}>
+          Reset view
+        </button>
       )}
     </div>
   )
@@ -112,13 +241,17 @@ function initScene(container: HTMLElement, canvas: HTMLCanvasElement): SceneStat
 
   const markerGroup = new THREE.Group()
   scene.add(markerGroup)
+  const trailGroup = new THREE.Group()
+  scene.add(trailGroup)
 
   const view = VIEWS.front
   const state: SceneState = {
     scene, camera, renderer,
     yaw: view.yaw, pitch: view.pitch, tYaw: view.yaw, tPitch: view.pitch,
+    lookOffset: new THREE.Vector3(0, 0, 0),
+    zoom: CFG.LOOK_DIST, tZoom: CFG.LOOK_DIST,
     animating: false, animId: 0, disposed: false, container,
-    markers: [], markerGroup,
+    markers: [], trails: [], markerGroup, trailGroup,
   }
 
   buildPointCloud(scene)
@@ -136,6 +269,7 @@ function initScene(container: HTMLElement, canvas: HTMLCanvasElement): SceneStat
     if (state.disposed) return
     state.yaw += (state.tYaw - state.yaw) * 0.07
     state.pitch += (state.tPitch - state.pitch) * 0.07
+    state.zoom += (state.tZoom - state.zoom) * 0.12
     updateCamera(state)
     renderer.render(scene, camera)
     state.animId = requestAnimationFrame(loop)
@@ -145,11 +279,12 @@ function initScene(container: HTMLElement, canvas: HTMLCanvasElement): SceneStat
 }
 
 function updateCamera(state: SceneState) {
-  const { camera, yaw, pitch } = state
+  const { camera, yaw, pitch, zoom, lookOffset } = state
+  camera.position.set(lookOffset.x, CFG.CAM_HEIGHT + lookOffset.y, lookOffset.z)
   camera.lookAt(
-    Math.sin(yaw) * Math.cos(pitch) * 10,
-    CFG.CAM_HEIGHT + Math.sin(pitch) * 10,
-    -Math.cos(yaw) * Math.cos(pitch) * 10,
+    lookOffset.x + Math.sin(yaw) * Math.cos(pitch) * zoom,
+    CFG.CAM_HEIGHT + lookOffset.y + Math.sin(pitch) * zoom,
+    lookOffset.z - Math.cos(yaw) * Math.cos(pitch) * zoom,
   )
 }
 
@@ -209,6 +344,48 @@ function updateMarkers(state: SceneState, tracks: TrackedObject[], focusedTrackI
     ring.rotation.x = -Math.PI / 2
     state.markerGroup.add(ring)
     state.markers.push({ ring, trackId: track.trackId })
+  }
+}
+
+function updateTrails(state: SceneState, tracks: TrackedObject[]) {
+  for (const t of state.trails) {
+    state.trailGroup.remove(t.line)
+    t.line.geometry.dispose()
+    ;(t.line.material as THREE.Material).dispose()
+  }
+  state.trails = []
+  for (const track of tracks) {
+    const trail = track.trail
+    if (!trail || trail.length < 2) continue
+    const positions = new Float32Array(trail.length * 3)
+    const colors = new Float32Array(trail.length * 3)
+    const flags = track.flags
+    const color = flags?.fastApproaching
+      ? [0.94, 0.26, 0.26]
+      : flags?.drone
+        ? [0.55, 0.36, 0.96]
+        : flags?.loitering
+          ? [0.96, 0.62, 0.11]
+          : [0.94, 0.26, 0.26]
+    for (let i = 0; i < trail.length; i++) {
+      const p = trail[i]
+      positions[i * 3] = p.x
+      positions[i * 3 + 1] = 0.18
+      positions[i * 3 + 2] = p.z
+      const a = 0.1 + 0.75 * (i / Math.max(1, trail.length - 1))
+      colors[i * 3] = color[0] * a
+      colors[i * 3 + 1] = color[1] * a
+      colors[i * 3 + 2] = color[2] * a
+    }
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+    const mat = new THREE.LineBasicMaterial({
+      vertexColors: true, transparent: true, depthWrite: false,
+    })
+    const line = new THREE.Line(geo, mat)
+    state.trailGroup.add(line)
+    state.trails.push({ line, trackId: track.trackId })
   }
 }
 

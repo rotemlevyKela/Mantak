@@ -1,13 +1,26 @@
 import { STREAM_LABELS, STREAM_ORDER } from '../../../domain/constants'
-import type { StreamId } from '../../../domain/types'
+import type { StreamId, ThreatKind } from '../../../domain/types'
+import { DemoMenu } from './DemoMenu'
 
 interface DockBarProps {
   activeStreamId: StreamId
   totalDetections: number
   onSwitchStream: (streamId: StreamId) => void
+  onFireThreat: (kind: ThreatKind) => void
+  onResetDemo: () => void
+  onToggleZones: () => void
+  zonesActive: boolean
 }
 
-export function DockBar({ activeStreamId, totalDetections, onSwitchStream }: DockBarProps) {
+export function DockBar({
+  activeStreamId,
+  totalDetections,
+  onSwitchStream,
+  onFireThreat,
+  onResetDemo,
+  onToggleZones,
+  zonesActive,
+}: DockBarProps) {
   return (
     <div className="t-dock">
       <div className="t-dock-left">
@@ -35,6 +48,15 @@ export function DockBar({ activeStreamId, totalDetections, onSwitchStream }: Doc
       </div>
 
       <div className="t-dock-right">
+        <button
+          type="button"
+          className={`t-dock-action${zonesActive ? ' t-dock-action--active' : ''}`}
+          onClick={onToggleZones}
+          aria-pressed={zonesActive}
+        >
+          Zones
+        </button>
+        <DemoMenu onFireThreat={onFireThreat} onResetDemo={onResetDemo} />
         <button className="t-dock-settings" type="button" aria-label="Settings">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="3" />
