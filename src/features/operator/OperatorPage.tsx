@@ -291,10 +291,12 @@ export function OperatorPage() {
       <DockBar
         activeStreamId={preferences.selectedStreamId}
         totalDetections={totalDetections}
+        soundEnabled={preferences.soundEnabled}
         onSwitchStream={switchStream}
         onFireThreat={onFireThreat}
         onResetDemo={onResetDemo}
         onToggleZones={() => setZonesEditorOpen((o) => !o)}
+        onToggleSound={() => setPreferences((p) => ({ ...p, soundEnabled: !p.soundEnabled }))}
         zonesActive={zonesEditorOpen}
       />
     </div>

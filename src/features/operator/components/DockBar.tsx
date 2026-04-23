@@ -1,3 +1,4 @@
+import { RiVolumeMuteLine, RiVolumeUpLine } from '@remixicon/react'
 import { STREAM_LABELS, STREAM_ORDER } from '../../../domain/constants'
 import type { StreamId, ThreatKind } from '../../../domain/types'
 import { DemoMenu } from './DemoMenu'
@@ -5,20 +6,24 @@ import { DemoMenu } from './DemoMenu'
 interface DockBarProps {
   activeStreamId: StreamId
   totalDetections: number
+  soundEnabled: boolean
   onSwitchStream: (streamId: StreamId) => void
   onFireThreat: (kind: ThreatKind) => void
   onResetDemo: () => void
   onToggleZones: () => void
+  onToggleSound: () => void
   zonesActive: boolean
 }
 
 export function DockBar({
   activeStreamId,
   totalDetections,
+  soundEnabled,
   onSwitchStream,
   onFireThreat,
   onResetDemo,
   onToggleZones,
+  onToggleSound,
   zonesActive,
 }: DockBarProps) {
   return (
@@ -57,6 +62,16 @@ export function DockBar({
           Zones
         </button>
         <DemoMenu onFireThreat={onFireThreat} onResetDemo={onResetDemo} />
+        <button
+          type="button"
+          className={`t-dock-action${soundEnabled ? '' : ' t-dock-action--active'}`}
+          onClick={onToggleSound}
+          aria-pressed={!soundEnabled}
+          aria-label={soundEnabled ? 'Mute alert sounds' : 'Unmute alert sounds'}
+          title={soundEnabled ? 'Mute alert sounds' : 'Unmute alert sounds'}
+        >
+          {soundEnabled ? <RiVolumeUpLine size={18} /> : <RiVolumeMuteLine size={18} />}
+        </button>
         <button className="t-dock-settings" type="button" aria-label="Settings">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="3" />
